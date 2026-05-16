@@ -1,0 +1,249 @@
+<!DOCTYPE html>
+
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>A Discrete Event Simulator</title>
+<meta content="Software Design by Example in Lean" name="description"/>
+<link href="../_static/favicon.ico" rel="icon" type="image/x-icon"/>
+<link href="../_static/pygments.css" rel="stylesheet" type="text/css"/>
+<link href="../_static/chota.css" rel="stylesheet" type="text/css"/>
+<link href="../_static/mccole.css" rel="stylesheet" type="text/css"/>
+</head>
+<body>
+<a class="skip-link" href="#main-content">Skip to main content</a>
+<nav aria-label="Site navigation" class="nav">
+<div class="nav-left">
+<a class="brand" href="../">sdxl</a>
+<div class="dropdown">
+<button aria-controls="nav-lessons" aria-haspopup="true">Lessons</button>
+<ul class="dropdown-content" id="nav-lessons">
+<li><a href="../intro/">Introduction</a></li>
+<li><a href="../vals/">Values, Types, and Functions</a></li>
+<li><a href="../adts/">Algebraic Data Types</a></li>
+<li><a href="../option/">The Option Type</a></li>
+<li><a href="../effect/">Error Handling and IO</a></li>
+<li><a href="../classes/">Type Classes and Recursion</a></li>
+<li><a href="../oop/">Objects and Classes</a></li>
+<li><a href="../dup/">Finding Duplicate Files</a></li>
+<li><a href="../glob/">Matching Patterns</a></li>
+<li><a href="../parse/">Parsing Text</a></li>
+<li><a href="../test/">Running Tests</a></li>
+<li><a href="../interp/">An Interpreter</a></li>
+<li><a href="../func/">Functions and Closures</a></li>
+<li><a href="../archive/">A File Archiver</a></li>
+<li><a href="../check/">An HTML Validator</a></li>
+<li><a href="../template/">A Template Expander</a></li>
+<li><a href="../lint/">A Code Linter</a></li>
+<li><a href="../layout/">Page Layout</a></li>
+<li><a href="../binary/">Binary Data</a></li>
+<li><a href="../db/">A Database</a></li>
+<li><a href="../build/">A Build Manager</a></li>
+<li><a href="../pack/">A Package Manager</a></li>
+<li><a href="../vm/">A Virtual Machine</a></li>
+<li><a href="../docgen/">Generating Documentation</a></li>
+<li><a class="active" href="../des/">A Discrete Event Simulator</a></li>
+<li><a href="../finale/">Conclusion</a></li>
+</ul>
+</div>
+<div class="dropdown">
+<button aria-controls="nav-appendices" aria-haspopup="true">Appendices</button>
+<ul class="dropdown-content" id="nav-appendices">
+<li><a href="../license/">License</a></li>
+<li><a href="../conduct/">Code of Conduct</a></li>
+<li><a href="../contributing/">Contributing</a></li>
+<li><a href="../bibliography/">Bibliography</a></li>
+<li><a href="../glossary/">Glossary</a></li>
+</ul>
+</div>
+<a href="https://github.com/gvwilson/webllm">Repository</a>
+</div>
+</nav>
+<main id="main-content">
+<h1>A Discrete Event Simulator</h1>
+<h2>Modeling Time as Events</h2>
+<ul>
+<li>A <a class="gl-ref" href="../glossary/#discrete-event-simulation">discrete event simulation</a> models a
+    system as a series of events, each happening at a specific point in time</li>
+<li>Between events, nothing changes—the <a class="gl-ref" href="../glossary/#simulation-clock">simulation clock</a>
+    jumps directly from one event to the next rather than ticking forward in
+    fixed steps</li>
+<li>Representing events as data rather than as running coroutines is the key
+    insight: it lets a single loop drive the entire simulation without any
+    shared mutable state or thread synchronization</li>
+<li>A single-server queue is the simplest non-trivial example: customers arrive,
+    wait if the server is busy, get served, and leave</li>
+<li>Two things can happen in this system, so <code>EventKind</code> has two constructors;
+    each <code>Event</code> pairs a kind with the time at which it occurs</li>
+</ul>
+<div data-inc="code.lean" data-mark="types"><span aria-label="Source: des/code.lean" class="inc-path" role="img" tabindex="0" title="des/code.lean">i</span><div class="codehilite"><pre class="" tabindex="0"><span></span><code><span class="kn">inductive</span><span class="w"> </span><span class="n">EventKind</span><span class="w"> </span><span class="kn">where</span>
+<span class="w">  </span><span class="bp">|</span><span class="w"> </span><span class="n">Arrive</span><span class="w"> </span><span class="o">:</span><span class="w"> </span><span class="n">EventKind</span>
+<span class="w">  </span><span class="bp">|</span><span class="w"> </span><span class="n">Depart</span><span class="w"> </span><span class="o">:</span><span class="w"> </span><span class="n">EventKind</span>
+<span class="w">  </span><span class="n">deriving</span><span class="w"> </span><span class="n">Repr</span>
+
+<span class="kn">structure</span><span class="w"> </span><span class="n">Event</span><span class="w"> </span><span class="kn">where</span>
+<span class="w">  </span><span class="n">time</span><span class="w"> </span><span class="o">:</span><span class="w"> </span><span class="n">Float</span>
+<span class="w">  </span><span class="n">kind</span><span class="w"> </span><span class="o">:</span><span class="w"> </span><span class="n">EventKind</span>
+<span class="w">  </span><span class="n">deriving</span><span class="w"> </span><span class="n">Repr</span>
+</code></pre></div>
+</div>
+<h2>Keeping Events in Order</h2>
+<ul>
+<li>The <a class="gl-ref" href="../glossary/#event-queue">event queue</a> is a <code>List Event</code> sorted by time,
+    smallest first, so the next event to process is always at the front</li>
+<li><code>enqueue</code> walks the list and inserts the new event before the first
+    existing event whose time is later</li>
+<li>Lean proves this terminates automatically because each recursive call
+    operates on a structurally smaller list</li>
+<li>Inserting in order is simpler than appending and re-sorting, and it keeps
+    the simulation loop free of sorting logic</li>
+</ul>
+<div data-inc="code.lean" data-mark="queue"><span aria-label="Source: des/code.lean" class="inc-path" role="img" tabindex="0" title="des/code.lean">i</span><div class="codehilite"><pre class="" tabindex="0"><span></span><code><span class="kn">def</span><span class="w"> </span><span class="n">enqueue</span><span class="w"> </span><span class="o">(</span><span class="n">e</span><span class="w"> </span><span class="o">:</span><span class="w"> </span><span class="n">Event</span><span class="o">)</span><span class="w"> </span><span class="o">(</span><span class="n">q</span><span class="w"> </span><span class="o">:</span><span class="w"> </span><span class="n">List</span><span class="w"> </span><span class="n">Event</span><span class="o">)</span><span class="w"> </span><span class="o">:</span><span class="w"> </span><span class="n">List</span><span class="w"> </span><span class="n">Event</span><span class="w"> </span><span class="o">:=</span>
+<span class="w">  </span><span class="k">match</span><span class="w"> </span><span class="n">q</span><span class="w"> </span><span class="k">with</span>
+<span class="w">  </span><span class="bp">|</span><span class="w"> </span><span class="o">[]</span><span class="w">     </span><span class="bp">=&gt;</span><span class="w"> </span><span class="o">[</span><span class="n">e</span><span class="o">]</span>
+<span class="w">  </span><span class="bp">|</span><span class="w"> </span><span class="n">h</span><span class="w"> </span><span class="bp">::</span><span class="w"> </span><span class="n">t</span><span class="w"> </span><span class="bp">=&gt;</span><span class="w"> </span><span class="k">if</span><span class="w"> </span><span class="n">e</span><span class="bp">.</span><span class="n">time</span><span class="w"> </span><span class="bp">&lt;=</span><span class="w"> </span><span class="n">h</span><span class="bp">.</span><span class="n">time</span><span class="w"> </span><span class="k">then</span><span class="w"> </span><span class="n">e</span><span class="w"> </span><span class="bp">::</span><span class="w"> </span><span class="n">h</span><span class="w"> </span><span class="bp">::</span><span class="w"> </span><span class="n">t</span><span class="w"> </span><span class="k">else</span><span class="w"> </span><span class="n">h</span><span class="w"> </span><span class="bp">::</span><span class="w"> </span><span class="n">enqueue</span><span class="w"> </span><span class="n">e</span><span class="w"> </span><span class="n">t</span>
+</code></pre></div>
+</div>
+<h2>Tracking State</h2>
+<ul>
+<li>The simulation needs to know whether the server is free and which customers
+    are waiting; bundling this into a <code>State</code> record keeps <code>step</code> a pure
+    function with no hidden side effects</li>
+<li><code>serverFree</code> is <code>true</code> when the server can take a new customer immediately</li>
+<li><code>waiting</code> records the arrival times of customers who are queued; its length
+    is the current queue depth</li>
+<li><code>log</code> accumulates a human-readable history of events so the caller can
+    inspect what happened after the simulation ends</li>
+</ul>
+<div data-inc="code.lean" data-mark="state"><span aria-label="Source: des/code.lean" class="inc-path" role="img" tabindex="0" title="des/code.lean">i</span><div class="codehilite"><pre class="" tabindex="0"><span></span><code><span class="kn">structure</span><span class="w"> </span><span class="n">State</span><span class="w"> </span><span class="kn">where</span>
+<span class="w">  </span><span class="n">serverFree</span><span class="w"> </span><span class="o">:</span><span class="w"> </span><span class="n">Bool</span>
+<span class="w">  </span><span class="n">waiting</span><span class="w">    </span><span class="o">:</span><span class="w"> </span><span class="n">List</span><span class="w"> </span><span class="n">Float</span>
+<span class="w">  </span><span class="n">log</span><span class="w">        </span><span class="o">:</span><span class="w"> </span><span class="n">List</span><span class="w"> </span><span class="n">String</span>
+<span class="w">  </span><span class="n">deriving</span><span class="w"> </span><span class="n">Repr</span>
+
+<span class="kn">def</span><span class="w"> </span><span class="n">initState</span><span class="w"> </span><span class="o">:</span><span class="w"> </span><span class="n">State</span><span class="w"> </span><span class="o">:=</span>
+<span class="w">  </span><span class="o">{</span><span class="w"> </span><span class="n">serverFree</span><span class="w"> </span><span class="o">:=</span><span class="w"> </span><span class="n">true</span><span class="o">,</span><span class="w"> </span><span class="n">waiting</span><span class="w"> </span><span class="o">:=</span><span class="w"> </span><span class="o">[],</span><span class="w"> </span><span class="n">log</span><span class="w"> </span><span class="o">:=</span><span class="w"> </span><span class="o">[]</span><span class="w"> </span><span class="o">}</span>
+</code></pre></div>
+</div>
+<h2>Processing Events</h2>
+<ul>
+<li><code>step</code> takes one event off the front of the queue and returns an updated
+    state and a new queue, possibly with a freshly scheduled event inserted</li>
+<li>When a customer arrives and the server is free, <code>step</code> schedules a
+    departure at <code>e.time + duration</code> and marks the server busy</li>
+<li>When a customer arrives and the server is busy, <code>step</code> appends the arrival
+    time to <code>waiting</code> and leaves the queue unchanged</li>
+<li>When a customer departs and someone is waiting, <code>step</code> immediately starts
+    serving the next customer by scheduling another departure</li>
+<li>When a customer departs and no one is waiting, <code>step</code> marks the server free
+    and adds nothing to the queue</li>
+</ul>
+<div data-inc="code.lean" data-mark="step"><span aria-label="Source: des/code.lean" class="inc-path" role="img" tabindex="0" title="des/code.lean">i</span><div class="codehilite"><pre class="" tabindex="0"><span></span><code><span class="kn">def</span><span class="w"> </span><span class="n">step</span><span class="w"> </span><span class="o">(</span><span class="n">e</span><span class="w"> </span><span class="o">:</span><span class="w"> </span><span class="n">Event</span><span class="o">)</span><span class="w"> </span><span class="o">(</span><span class="n">s</span><span class="w"> </span><span class="o">:</span><span class="w"> </span><span class="n">State</span><span class="o">)</span><span class="w"> </span><span class="o">(</span><span class="n">q</span><span class="w"> </span><span class="o">:</span><span class="w"> </span><span class="n">List</span><span class="w"> </span><span class="n">Event</span><span class="o">)</span><span class="w"> </span><span class="o">(</span><span class="n">duration</span><span class="w"> </span><span class="o">:</span><span class="w"> </span><span class="n">Float</span><span class="o">)</span>
+<span class="w">    </span><span class="o">:</span><span class="w"> </span><span class="n">State</span><span class="w"> </span><span class="bp">×</span><span class="w"> </span><span class="n">List</span><span class="w"> </span><span class="n">Event</span><span class="w"> </span><span class="o">:=</span>
+<span class="w">  </span><span class="k">match</span><span class="w"> </span><span class="n">e</span><span class="bp">.</span><span class="n">kind</span><span class="w"> </span><span class="k">with</span>
+<span class="w">  </span><span class="bp">|</span><span class="w"> </span><span class="bp">.</span><span class="n">Arrive</span><span class="w"> </span><span class="bp">=&gt;</span>
+<span class="w">    </span><span class="k">if</span><span class="w"> </span><span class="n">s</span><span class="bp">.</span><span class="n">serverFree</span><span class="w"> </span><span class="k">then</span>
+<span class="w">      </span><span class="k">let</span><span class="w"> </span><span class="n">depart</span><span class="w"> </span><span class="o">:=</span><span class="w"> </span><span class="o">{</span><span class="w"> </span><span class="n">time</span><span class="w"> </span><span class="o">:=</span><span class="w"> </span><span class="n">e</span><span class="bp">.</span><span class="n">time</span><span class="w"> </span><span class="bp">+</span><span class="w"> </span><span class="n">duration</span><span class="o">,</span><span class="w"> </span><span class="n">kind</span><span class="w"> </span><span class="o">:=</span><span class="w"> </span><span class="bp">.</span><span class="n">Depart</span><span class="w"> </span><span class="o">}</span>
+<span class="w">      </span><span class="k">let</span><span class="w"> </span><span class="n">msg</span><span class="w">    </span><span class="o">:=</span><span class="w"> </span><span class="n">s!</span><span class="s2">"t={e.time}: arrive, start service"</span>
+<span class="w">      </span><span class="o">({</span><span class="w"> </span><span class="n">s</span><span class="w"> </span><span class="k">with</span><span class="w"> </span><span class="n">serverFree</span><span class="w"> </span><span class="o">:=</span><span class="w"> </span><span class="n">false</span><span class="o">,</span><span class="w"> </span><span class="n">log</span><span class="w"> </span><span class="o">:=</span><span class="w"> </span><span class="n">s</span><span class="bp">.</span><span class="n">log</span><span class="w"> </span><span class="bp">++</span><span class="w"> </span><span class="o">[</span><span class="n">msg</span><span class="o">]</span><span class="w"> </span><span class="o">},</span><span class="w"> </span><span class="n">enqueue</span><span class="w"> </span><span class="n">depart</span><span class="w"> </span><span class="n">q</span><span class="o">)</span>
+<span class="w">    </span><span class="k">else</span>
+<span class="w">      </span><span class="k">let</span><span class="w"> </span><span class="n">msg</span><span class="w"> </span><span class="o">:=</span><span class="w"> </span><span class="n">s!</span><span class="s2">"t={e.time}: arrive, queue ({s.waiting.length + 1} waiting)"</span>
+<span class="w">      </span><span class="o">({</span><span class="w"> </span><span class="n">s</span><span class="w"> </span><span class="k">with</span><span class="w"> </span><span class="n">waiting</span><span class="w"> </span><span class="o">:=</span><span class="w"> </span><span class="n">s</span><span class="bp">.</span><span class="n">waiting</span><span class="w"> </span><span class="bp">++</span><span class="w"> </span><span class="o">[</span><span class="n">e</span><span class="bp">.</span><span class="n">time</span><span class="o">],</span><span class="w"> </span><span class="n">log</span><span class="w"> </span><span class="o">:=</span><span class="w"> </span><span class="n">s</span><span class="bp">.</span><span class="n">log</span><span class="w"> </span><span class="bp">++</span><span class="w"> </span><span class="o">[</span><span class="n">msg</span><span class="o">]</span><span class="w"> </span><span class="o">},</span><span class="w"> </span><span class="n">q</span><span class="o">)</span>
+<span class="w">  </span><span class="bp">|</span><span class="w"> </span><span class="bp">.</span><span class="n">Depart</span><span class="w"> </span><span class="bp">=&gt;</span>
+<span class="w">    </span><span class="k">match</span><span class="w"> </span><span class="n">s</span><span class="bp">.</span><span class="n">waiting</span><span class="w"> </span><span class="k">with</span>
+<span class="w">    </span><span class="bp">|</span><span class="w"> </span><span class="o">[]</span><span class="w"> </span><span class="bp">=&gt;</span>
+<span class="w">      </span><span class="k">let</span><span class="w"> </span><span class="n">msg</span><span class="w"> </span><span class="o">:=</span><span class="w"> </span><span class="n">s!</span><span class="s2">"t={e.time}: depart, server idle"</span>
+<span class="w">      </span><span class="o">({</span><span class="w"> </span><span class="n">s</span><span class="w"> </span><span class="k">with</span><span class="w"> </span><span class="n">serverFree</span><span class="w"> </span><span class="o">:=</span><span class="w"> </span><span class="n">true</span><span class="o">,</span><span class="w"> </span><span class="n">log</span><span class="w"> </span><span class="o">:=</span><span class="w"> </span><span class="n">s</span><span class="bp">.</span><span class="n">log</span><span class="w"> </span><span class="bp">++</span><span class="w"> </span><span class="o">[</span><span class="n">msg</span><span class="o">]</span><span class="w"> </span><span class="o">},</span><span class="w"> </span><span class="n">q</span><span class="o">)</span>
+<span class="w">    </span><span class="bp">|</span><span class="w"> </span><span class="bp">_</span><span class="w"> </span><span class="bp">::</span><span class="w"> </span><span class="n">rest</span><span class="w"> </span><span class="bp">=&gt;</span>
+<span class="w">      </span><span class="k">let</span><span class="w"> </span><span class="n">depart</span><span class="w"> </span><span class="o">:=</span><span class="w"> </span><span class="o">{</span><span class="w"> </span><span class="n">time</span><span class="w"> </span><span class="o">:=</span><span class="w"> </span><span class="n">e</span><span class="bp">.</span><span class="n">time</span><span class="w"> </span><span class="bp">+</span><span class="w"> </span><span class="n">duration</span><span class="o">,</span><span class="w"> </span><span class="n">kind</span><span class="w"> </span><span class="o">:=</span><span class="w"> </span><span class="bp">.</span><span class="n">Depart</span><span class="w"> </span><span class="o">}</span>
+<span class="w">      </span><span class="k">let</span><span class="w"> </span><span class="n">msg</span><span class="w">    </span><span class="o">:=</span><span class="w"> </span><span class="n">s!</span><span class="s2">"t={e.time}: depart, next customer starts"</span>
+<span class="w">      </span><span class="o">({</span><span class="w"> </span><span class="n">s</span><span class="w"> </span><span class="k">with</span><span class="w"> </span><span class="n">waiting</span><span class="w"> </span><span class="o">:=</span><span class="w"> </span><span class="n">rest</span><span class="o">,</span><span class="w"> </span><span class="n">log</span><span class="w"> </span><span class="o">:=</span><span class="w"> </span><span class="n">s</span><span class="bp">.</span><span class="n">log</span><span class="w"> </span><span class="bp">++</span><span class="w"> </span><span class="o">[</span><span class="n">msg</span><span class="o">]</span><span class="w"> </span><span class="o">},</span><span class="w"> </span><span class="n">enqueue</span><span class="w"> </span><span class="n">depart</span><span class="w"> </span><span class="n">q</span><span class="o">)</span>
+</code></pre></div>
+</div>
+<h2>Running the Loop</h2>
+<ul>
+<li><code>simulate</code> calls <code>step</code> repeatedly until the queue is empty, threading the
+    state through each call</li>
+<li>Lean cannot prove <code>simulate</code> terminates because each call to <code>step</code> may add
+    a new event, so we mark it <code>partial</code>; in practice the queue empties once
+    the last customer departs</li>
+<li>Three customers arriving at times 0, 2, and 5 with a service duration of 3
+    produce six log entries: the second and third customers each wait briefly
+    before the server is free</li>
+<li>This design follows the event-queue approach described in [<a class="bib-ref" href="../bibliography/#Banks2014">Banks2014</a>],
+    which is the standard reference on discrete event simulation</li>
+</ul>
+<div data-inc="code.lean" data-mark="run"><span aria-label="Source: des/code.lean" class="inc-path" role="img" tabindex="0" title="des/code.lean">i</span><div class="codehilite"><pre class="" tabindex="0"><span></span><code><span class="n">partial</span><span class="w"> </span><span class="kn">def</span><span class="w"> </span><span class="n">simulate</span><span class="w"> </span><span class="o">(</span><span class="n">q</span><span class="w"> </span><span class="o">:</span><span class="w"> </span><span class="n">List</span><span class="w"> </span><span class="n">Event</span><span class="o">)</span><span class="w"> </span><span class="o">(</span><span class="n">s</span><span class="w"> </span><span class="o">:</span><span class="w"> </span><span class="n">State</span><span class="o">)</span><span class="w"> </span><span class="o">(</span><span class="n">duration</span><span class="w"> </span><span class="o">:</span><span class="w"> </span><span class="n">Float</span><span class="o">)</span><span class="w"> </span><span class="o">:</span><span class="w"> </span><span class="n">State</span><span class="w"> </span><span class="o">:=</span>
+<span class="w">  </span><span class="k">match</span><span class="w"> </span><span class="n">q</span><span class="w"> </span><span class="k">with</span>
+<span class="w">  </span><span class="bp">|</span><span class="w"> </span><span class="o">[]</span><span class="w">     </span><span class="bp">=&gt;</span><span class="w"> </span><span class="n">s</span>
+<span class="w">  </span><span class="bp">|</span><span class="w"> </span><span class="n">e</span><span class="w"> </span><span class="bp">::</span><span class="w"> </span><span class="n">rest</span><span class="w"> </span><span class="bp">=&gt;</span>
+<span class="w">    </span><span class="k">let</span><span class="w"> </span><span class="o">(</span><span class="n">s'</span><span class="o">,</span><span class="w"> </span><span class="n">q'</span><span class="o">)</span><span class="w"> </span><span class="o">:=</span><span class="w"> </span><span class="n">step</span><span class="w"> </span><span class="n">e</span><span class="w"> </span><span class="n">s</span><span class="w"> </span><span class="n">rest</span><span class="w"> </span><span class="n">duration</span>
+<span class="w">    </span><span class="n">simulate</span><span class="w"> </span><span class="n">q'</span><span class="w"> </span><span class="n">s'</span><span class="w"> </span><span class="n">duration</span>
+
+<span class="kn">def</span><span class="w"> </span><span class="n">arrivals</span><span class="w"> </span><span class="o">:</span><span class="w"> </span><span class="n">List</span><span class="w"> </span><span class="n">Event</span><span class="w"> </span><span class="o">:=</span>
+<span class="w">  </span><span class="o">[{</span><span class="w"> </span><span class="n">time</span><span class="w"> </span><span class="o">:=</span><span class="w"> </span><span class="mi">0</span><span class="o">,</span><span class="w"> </span><span class="n">kind</span><span class="w"> </span><span class="o">:=</span><span class="w"> </span><span class="bp">.</span><span class="n">Arrive</span><span class="w"> </span><span class="o">},</span>
+<span class="w">   </span><span class="o">{</span><span class="w"> </span><span class="n">time</span><span class="w"> </span><span class="o">:=</span><span class="w"> </span><span class="mi">2</span><span class="o">,</span><span class="w"> </span><span class="n">kind</span><span class="w"> </span><span class="o">:=</span><span class="w"> </span><span class="bp">.</span><span class="n">Arrive</span><span class="w"> </span><span class="o">},</span>
+<span class="w">   </span><span class="o">{</span><span class="w"> </span><span class="n">time</span><span class="w"> </span><span class="o">:=</span><span class="w"> </span><span class="mi">5</span><span class="o">,</span><span class="w"> </span><span class="n">kind</span><span class="w"> </span><span class="o">:=</span><span class="w"> </span><span class="bp">.</span><span class="n">Arrive</span><span class="w"> </span><span class="o">}]</span>
+
+<span class="bp">#</span><span class="n">eval</span><span class="w"> </span><span class="o">(</span><span class="n">simulate</span><span class="w"> </span><span class="n">arrivals</span><span class="w"> </span><span class="n">initState</span><span class="w"> </span><span class="mf">3.0</span><span class="o">)</span><span class="bp">.</span><span class="n">log</span>
+<span class="c1">-- ["t=0.000000: arrive, start service",</span>
+<span class="c1">--  "t=2.000000: arrive, queue (1 waiting)",</span>
+<span class="c1">--  "t=3.000000: depart, next customer starts",</span>
+<span class="c1">--  "t=5.000000: arrive, queue (1 waiting)",</span>
+<span class="c1">--  "t=6.000000: depart, next customer starts",</span>
+<span class="c1">--  "t=9.000000: depart, server idle"]</span>
+</code></pre></div>
+</div>
+<h2>Exercises</h2>
+<h3>Adding a Second Server</h3>
+<ul>
+<li>Replace <code>serverFree : Bool</code> with <code>serversAvailable : Nat</code> to model a pool
+    of servers</li>
+<li>Update <code>step</code> so an arriving customer takes one server if any are available
+    and joins the wait queue otherwise</li>
+<li>Test with two servers and the same three arrivals and verify that no
+    customer ever has to wait</li>
+</ul>
+<h3>Tracking Wait Times</h3>
+<ul>
+<li>Store each customer's arrival time when they join <code>waiting</code> instead of
+    discarding it</li>
+<li>When a depart event starts the next customer, compute how long that customer
+    waited and append it to a <code>List Float</code> in <code>State</code></li>
+<li>Run the simulation and report the longest wait across all customers</li>
+</ul>
+<h3>Stopping Early</h3>
+<ul>
+<li>Add a <code>limit : Float</code> parameter to <code>simulate</code></li>
+<li>Stop processing events once <code>e.time &gt; limit</code> and return the state at that
+    point along with the unprocessed queue</li>
+<li>Run the three-customer example with a limit of 4 and check which events are
+    left in the queue</li>
+</ul>
+<h3>Turning Customers Away</h3>
+<ul>
+<li>Add a <code>capacity : Nat</code> parameter to <code>step</code> representing the maximum number
+    of customers allowed to wait</li>
+<li>Add a <code>turnedAway : Nat</code> counter to <code>State</code></li>
+<li>When a customer arrives and the queue is already at capacity, increment
+    <code>turnedAway</code> instead of adding them to <code>waiting</code></li>
+</ul>
+</main>
+<footer aria-label="Page navigation">
+<div class="row">
+<div class="col-3 left">
+<span aria-hidden="true">⇐</span> <a href="../docgen/">Generating Documentation</a>
+</div>
+<div class="col-6 center">
+<a href="../">sdxl</a>
+	  ©
+	  <a href="../#acknowledgments">the authors</a>
+</div>
+<div class="col-3 right">
+<a href="../finale/">Conclusion</a> <span aria-hidden="true">⇒</span>
+</div>
+</div>
+</footer>
+</body>
+</html>

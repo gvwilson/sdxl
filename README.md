@@ -34,6 +34,7 @@
 1.  [A Package Manager](@/pack/)
 1.  [A Virtual Machine](@/vm/)
 1.  [Generating Documentation](@/docgen/)
+1.  [A Discrete Event Simulator](@/des/)
 1.  [Conclusion](@/finale/)
 
 </div>
