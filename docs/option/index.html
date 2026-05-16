@@ -1,0 +1,192 @@
+<!DOCTYPE html>
+
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>The Option Type</title>
+<meta content="Software Design by Example in Lean" name="description"/>
+<link href="../_static/favicon.ico" rel="icon" type="image/x-icon"/>
+<link href="../_static/pygments.css" rel="stylesheet" type="text/css"/>
+<link href="../_static/chota.css" rel="stylesheet" type="text/css"/>
+<link href="../_static/mccole.css" rel="stylesheet" type="text/css"/>
+</head>
+<body>
+<a class="skip-link" href="#main-content">Skip to main content</a>
+<nav aria-label="Site navigation" class="nav">
+<div class="nav-left">
+<a class="brand" href="../">sdxl</a>
+<div class="dropdown">
+<button aria-controls="nav-lessons" aria-haspopup="true">Lessons</button>
+<ul class="dropdown-content" id="nav-lessons">
+<li><a href="../intro/">Introduction</a></li>
+<li><a href="../vals/">Values, Types, and Functions</a></li>
+<li><a href="../adts/">Algebraic Data Types</a></li>
+<li><a class="active" href="../option/">The Option Type</a></li>
+<li><a href="../effect/">Error Handling and IO</a></li>
+<li><a href="../classes/">Type Classes and Recursion</a></li>
+<li><a href="../oop/">Objects and Classes</a></li>
+<li><a href="../dup/">Finding Duplicate Files</a></li>
+<li><a href="../glob/">Matching Patterns</a></li>
+<li><a href="../parse/">Parsing Text</a></li>
+<li><a href="../test/">Running Tests</a></li>
+<li><a href="../interp/">An Interpreter</a></li>
+<li><a href="../func/">Functions and Closures</a></li>
+<li><a href="../archive/">A File Archiver</a></li>
+<li><a href="../check/">An HTML Validator</a></li>
+<li><a href="../template/">A Template Expander</a></li>
+<li><a href="../lint/">A Code Linter</a></li>
+<li><a href="../layout/">Page Layout</a></li>
+<li><a href="../binary/">Binary Data</a></li>
+<li><a href="../db/">A Database</a></li>
+<li><a href="../build/">A Build Manager</a></li>
+<li><a href="../pack/">A Package Manager</a></li>
+<li><a href="../vm/">A Virtual Machine</a></li>
+<li><a href="../docgen/">Generating Documentation</a></li>
+<li><a href="../finale/">Conclusion</a></li>
+</ul>
+</div>
+<div class="dropdown">
+<button aria-controls="nav-appendices" aria-haspopup="true">Appendices</button>
+<ul class="dropdown-content" id="nav-appendices">
+<li><a href="../license/">License</a></li>
+<li><a href="../conduct/">Code of Conduct</a></li>
+<li><a href="../contributing/">Contributing</a></li>
+<li><a href="../bibliography/">Bibliography</a></li>
+<li><a href="../glossary/">Glossary</a></li>
+</ul>
+</div>
+<a href="https://github.com/gvwilson/webllm">Repository</a>
+</div>
+</nav>
+<main id="main-content">
+<h1>The Option Type</h1>
+<h2>Handling Missing Values</h2>
+<ul>
+<li><code>Option α</code> represents a value that may be absent: <code>some v</code> wraps a present value and <code>none</code> signals absence</li>
+<li>This is Lean's answer to <code>null</code>; the type system forces every caller to handle both cases explicitly</li>
+<li>Pattern match with <code>| some v =&gt; ... | none =&gt; ...</code> when the two branches need different logic</li>
+<li><code>Option.map f opt</code> applies <code>f</code> to the wrapped value if present; <code>none</code> passes through unchanged</li>
+<li><code>Option.getD opt default</code> extracts the value or returns <code>default</code> when the option is <code>none</code></li>
+<li><code>do</code> notation for <code>Option</code> lets you sequence option-returning steps; a single <code>none</code> short-circuits the rest of the chain</li>
+</ul>
+<div data-inc="missing.lean"><span aria-label="Source: option/missing.lean" class="inc-path" role="img" tabindex="0" title="option/missing.lean">i</span><div class="codehilite"><pre class="" tabindex="0"><span></span><code><span class="c1">-- Option α is either (some value) or none; there is no null in Lean</span>
+<span class="kn">def</span><span class="w"> </span><span class="n">safeDivide</span><span class="w"> </span><span class="o">(</span><span class="n">a</span><span class="w"> </span><span class="n">b</span><span class="w"> </span><span class="o">:</span><span class="w"> </span><span class="n">Int</span><span class="o">)</span><span class="w"> </span><span class="o">:</span><span class="w"> </span><span class="n">Option</span><span class="w"> </span><span class="n">Int</span><span class="w"> </span><span class="o">:=</span>
+<span class="w">  </span><span class="k">if</span><span class="w"> </span><span class="n">b</span><span class="w"> </span><span class="bp">==</span><span class="w"> </span><span class="mi">0</span><span class="w"> </span><span class="k">then</span><span class="w"> </span><span class="n">none</span><span class="w"> </span><span class="k">else</span><span class="w"> </span><span class="n">some</span><span class="w"> </span><span class="o">(</span><span class="n">a</span><span class="w"> </span><span class="bp">/</span><span class="w"> </span><span class="n">b</span><span class="o">)</span>
+
+<span class="bp">#</span><span class="n">guard</span><span class="w"> </span><span class="n">safeDivide</span><span class="w"> </span><span class="mi">10</span><span class="w"> </span><span class="mi">2</span><span class="w"> </span><span class="bp">==</span><span class="w"> </span><span class="n">some</span><span class="w"> </span><span class="mi">5</span>
+<span class="bp">#</span><span class="n">guard</span><span class="w"> </span><span class="n">safeDivide</span><span class="w"> </span><span class="mi">10</span><span class="w"> </span><span class="mi">0</span><span class="w"> </span><span class="bp">==</span><span class="w"> </span><span class="n">none</span>
+
+<span class="c1">-- map transforms the value if present; none passes through unchanged</span>
+<span class="bp">#</span><span class="n">guard</span><span class="w"> </span><span class="o">(</span><span class="n">safeDivide</span><span class="w"> </span><span class="mi">10</span><span class="w"> </span><span class="mi">2</span><span class="o">)</span><span class="bp">.</span><span class="n">map</span><span class="w"> </span><span class="o">(</span><span class="bp">·</span><span class="w"> </span><span class="bp">*</span><span class="w"> </span><span class="mi">3</span><span class="o">)</span><span class="w"> </span><span class="bp">==</span><span class="w"> </span><span class="n">some</span><span class="w"> </span><span class="mi">15</span>
+<span class="bp">#</span><span class="n">guard</span><span class="w"> </span><span class="o">(</span><span class="n">safeDivide</span><span class="w"> </span><span class="mi">10</span><span class="w"> </span><span class="mi">0</span><span class="o">)</span><span class="bp">.</span><span class="n">map</span><span class="w"> </span><span class="o">(</span><span class="bp">·</span><span class="w"> </span><span class="bp">*</span><span class="w"> </span><span class="mi">3</span><span class="o">)</span><span class="w"> </span><span class="bp">==</span><span class="w"> </span><span class="n">none</span>
+
+<span class="c1">-- getD supplies a default when the value is absent</span>
+<span class="bp">#</span><span class="n">guard</span><span class="w"> </span><span class="o">(</span><span class="n">safeDivide</span><span class="w"> </span><span class="mi">10</span><span class="w"> </span><span class="mi">0</span><span class="o">)</span><span class="bp">.</span><span class="n">getD</span><span class="w"> </span><span class="o">(</span><span class="bp">-</span><span class="mi">1</span><span class="o">)</span><span class="w"> </span><span class="bp">==</span><span class="w"> </span><span class="bp">-</span><span class="mi">1</span>
+
+<span class="c1">-- Explicit pattern match when the two branches need different logic</span>
+<span class="kn">def</span><span class="w"> </span><span class="n">describe</span><span class="w"> </span><span class="o">(</span><span class="n">a</span><span class="w"> </span><span class="n">b</span><span class="w"> </span><span class="o">:</span><span class="w"> </span><span class="n">Int</span><span class="o">)</span><span class="w"> </span><span class="o">:</span><span class="w"> </span><span class="n">String</span><span class="w"> </span><span class="o">:=</span>
+<span class="w">  </span><span class="k">match</span><span class="w"> </span><span class="n">safeDivide</span><span class="w"> </span><span class="n">a</span><span class="w"> </span><span class="n">b</span><span class="w"> </span><span class="k">with</span>
+<span class="w">  </span><span class="bp">|</span><span class="w"> </span><span class="n">some</span><span class="w"> </span><span class="n">q</span><span class="w"> </span><span class="bp">=&gt;</span><span class="w"> </span><span class="n">s!</span><span class="s2">"{a} / {b} = {q}"</span>
+<span class="w">  </span><span class="bp">|</span><span class="w"> </span><span class="n">none</span><span class="w">   </span><span class="bp">=&gt;</span><span class="w"> </span><span class="s2">"cannot divide by zero"</span>
+
+<span class="bp">#</span><span class="n">eval</span><span class="w"> </span><span class="n">describe</span><span class="w"> </span><span class="mi">10</span><span class="w"> </span><span class="mi">3</span><span class="w">    </span><span class="c1">-- "10 / 3 = 3"</span>
+<span class="bp">#</span><span class="n">eval</span><span class="w"> </span><span class="n">describe</span><span class="w"> </span><span class="mi">10</span><span class="w"> </span><span class="mi">0</span><span class="w">    </span><span class="c1">-- "cannot divide by zero"</span>
+
+<span class="c1">-- do notation: each &lt;- short-circuits the chain if the result is none</span>
+<span class="kn">def</span><span class="w"> </span><span class="n">compute</span><span class="w"> </span><span class="o">(</span><span class="n">a</span><span class="w"> </span><span class="n">b</span><span class="w"> </span><span class="n">c</span><span class="w"> </span><span class="o">:</span><span class="w"> </span><span class="n">Int</span><span class="o">)</span><span class="w"> </span><span class="o">:</span><span class="w"> </span><span class="n">Option</span><span class="w"> </span><span class="n">Int</span><span class="w"> </span><span class="o">:=</span><span class="w"> </span><span class="k">do</span>
+<span class="w">  </span><span class="k">let</span><span class="w"> </span><span class="n">x</span><span class="w"> </span><span class="bp">←</span><span class="w"> </span><span class="n">safeDivide</span><span class="w"> </span><span class="n">a</span><span class="w"> </span><span class="n">b</span>
+<span class="w">  </span><span class="k">let</span><span class="w"> </span><span class="n">y</span><span class="w"> </span><span class="bp">←</span><span class="w"> </span><span class="n">safeDivide</span><span class="w"> </span><span class="n">x</span><span class="w"> </span><span class="n">c</span>
+<span class="w">  </span><span class="n">return</span><span class="w"> </span><span class="n">x</span><span class="w"> </span><span class="bp">+</span><span class="w"> </span><span class="n">y</span>
+
+<span class="bp">#</span><span class="n">guard</span><span class="w"> </span><span class="n">compute</span><span class="w"> </span><span class="mi">10</span><span class="w"> </span><span class="mi">2</span><span class="w"> </span><span class="mi">1</span><span class="w"> </span><span class="bp">==</span><span class="w"> </span><span class="n">some</span><span class="w"> </span><span class="mi">10</span><span class="w">   </span><span class="c1">-- x=5, y=5, x+y=10</span>
+<span class="bp">#</span><span class="n">guard</span><span class="w"> </span><span class="n">compute</span><span class="w"> </span><span class="mi">10</span><span class="w"> </span><span class="mi">0</span><span class="w"> </span><span class="mi">1</span><span class="w"> </span><span class="bp">==</span><span class="w"> </span><span class="n">none</span><span class="w">      </span><span class="c1">-- first step fails; chain stops</span>
+</code></pre></div>
+</div>
+<h2>Lists and Option</h2>
+<ul>
+<li><code>List.find? p xs</code> returns <code>some x</code> for the first element satisfying <code>p</code>, or <code>none</code> if nothing matches</li>
+<li><code>List.filterMap f xs</code> applies <code>f</code> to each element and collects only the <code>some</code> results</li>
+<li><code>List.findSome? f xs</code> applies <code>f</code> and returns the first <code>some</code> result, stopping early</li>
+<li>The shorthand <code>(·.1 == key)</code> reads as <code>fun p =&gt; p.1 == key</code>, useful for searching lists of pairs</li>
+<li>Combine <code>find?</code> and <code>map</code> to implement safe dictionary lookup over <code>List (String × α)</code> without any special data structure</li>
+</ul>
+<div data-inc="listops.lean"><span aria-label="Source: option/listops.lean" class="inc-path" role="img" tabindex="0" title="option/listops.lean">i</span><div class="codehilite"><pre class="" tabindex="0"><span></span><code><span class="c1">-- find? returns Some of the first element matching the predicate</span>
+<span class="kn">def</span><span class="w"> </span><span class="n">lookup</span><span class="w"> </span><span class="o">(</span><span class="n">key</span><span class="w"> </span><span class="o">:</span><span class="w"> </span><span class="n">String</span><span class="o">)</span><span class="w"> </span><span class="o">(</span><span class="n">pairs</span><span class="w"> </span><span class="o">:</span><span class="w"> </span><span class="n">List</span><span class="w"> </span><span class="o">(</span><span class="n">String</span><span class="w"> </span><span class="bp">×</span><span class="w"> </span><span class="n">Int</span><span class="o">))</span><span class="w"> </span><span class="o">:</span><span class="w"> </span><span class="n">Option</span><span class="w"> </span><span class="n">Int</span><span class="w"> </span><span class="o">:=</span>
+<span class="w">  </span><span class="o">(</span><span class="n">pairs</span><span class="bp">.</span><span class="n">find?</span><span class="w"> </span><span class="o">(</span><span class="bp">·.</span><span class="m">1</span><span class="w"> </span><span class="bp">==</span><span class="w"> </span><span class="n">key</span><span class="o">))</span><span class="bp">.</span><span class="n">map</span><span class="w"> </span><span class="o">(</span><span class="bp">·.</span><span class="m">2</span><span class="o">)</span>
+
+<span class="bp">#</span><span class="n">guard</span><span class="w"> </span><span class="n">lookup</span><span class="w"> </span><span class="s2">"b"</span><span class="w"> </span><span class="o">[(</span><span class="s2">"a"</span><span class="o">,</span><span class="w"> </span><span class="mi">1</span><span class="o">),</span><span class="w"> </span><span class="o">(</span><span class="s2">"b"</span><span class="o">,</span><span class="w"> </span><span class="mi">2</span><span class="o">),</span><span class="w"> </span><span class="o">(</span><span class="s2">"c"</span><span class="o">,</span><span class="w"> </span><span class="mi">3</span><span class="o">)]</span><span class="w"> </span><span class="bp">==</span><span class="w"> </span><span class="n">some</span><span class="w"> </span><span class="mi">2</span>
+<span class="bp">#</span><span class="n">guard</span><span class="w"> </span><span class="n">lookup</span><span class="w"> </span><span class="s2">"z"</span><span class="w"> </span><span class="o">[(</span><span class="s2">"a"</span><span class="o">,</span><span class="w"> </span><span class="mi">1</span><span class="o">),</span><span class="w"> </span><span class="o">(</span><span class="s2">"b"</span><span class="o">,</span><span class="w"> </span><span class="mi">2</span><span class="o">)]</span><span class="w"> </span><span class="bp">==</span><span class="w"> </span><span class="n">none</span>
+
+<span class="c1">-- filterMap applies a function and keeps only the Some results</span>
+<span class="kn">def</span><span class="w"> </span><span class="n">onlyEvens</span><span class="w"> </span><span class="o">(</span><span class="n">xs</span><span class="w"> </span><span class="o">:</span><span class="w"> </span><span class="n">List</span><span class="w"> </span><span class="n">Nat</span><span class="o">)</span><span class="w"> </span><span class="o">:</span><span class="w"> </span><span class="n">List</span><span class="w"> </span><span class="n">Nat</span><span class="w"> </span><span class="o">:=</span>
+<span class="w">  </span><span class="n">xs</span><span class="bp">.</span><span class="n">filterMap</span><span class="w"> </span><span class="k">fun</span><span class="w"> </span><span class="n">n</span><span class="w"> </span><span class="bp">=&gt;</span><span class="w"> </span><span class="k">if</span><span class="w"> </span><span class="n">n</span><span class="w"> </span><span class="bp">%</span><span class="w"> </span><span class="mi">2</span><span class="w"> </span><span class="bp">==</span><span class="w"> </span><span class="mi">0</span><span class="w"> </span><span class="k">then</span><span class="w"> </span><span class="n">some</span><span class="w"> </span><span class="n">n</span><span class="w"> </span><span class="k">else</span><span class="w"> </span><span class="n">none</span>
+
+<span class="bp">#</span><span class="n">guard</span><span class="w"> </span><span class="n">onlyEvens</span><span class="w"> </span><span class="o">[</span><span class="mi">1</span><span class="o">,</span><span class="w"> </span><span class="mi">2</span><span class="o">,</span><span class="w"> </span><span class="mi">3</span><span class="o">,</span><span class="w"> </span><span class="mi">4</span><span class="o">,</span><span class="w"> </span><span class="mi">5</span><span class="o">]</span><span class="w"> </span><span class="bp">==</span><span class="w"> </span><span class="o">[</span><span class="mi">2</span><span class="o">,</span><span class="w"> </span><span class="mi">4</span><span class="o">]</span>
+
+<span class="c1">-- findSome? returns the first Some produced by the function</span>
+<span class="kn">def</span><span class="w"> </span><span class="n">firstOver</span><span class="w"> </span><span class="o">(</span><span class="n">limit</span><span class="w"> </span><span class="o">:</span><span class="w"> </span><span class="n">Int</span><span class="o">)</span><span class="w"> </span><span class="o">(</span><span class="n">xs</span><span class="w"> </span><span class="o">:</span><span class="w"> </span><span class="n">List</span><span class="w"> </span><span class="n">Int</span><span class="o">)</span><span class="w"> </span><span class="o">:</span><span class="w"> </span><span class="n">Option</span><span class="w"> </span><span class="n">Int</span><span class="w"> </span><span class="o">:=</span>
+<span class="w">  </span><span class="n">xs</span><span class="bp">.</span><span class="n">findSome?</span><span class="w"> </span><span class="k">fun</span><span class="w"> </span><span class="n">x</span><span class="w"> </span><span class="bp">=&gt;</span><span class="w"> </span><span class="k">if</span><span class="w"> </span><span class="n">x</span><span class="w"> </span><span class="bp">&gt;</span><span class="w"> </span><span class="n">limit</span><span class="w"> </span><span class="k">then</span><span class="w"> </span><span class="n">some</span><span class="w"> </span><span class="n">x</span><span class="w"> </span><span class="k">else</span><span class="w"> </span><span class="n">none</span>
+
+<span class="bp">#</span><span class="n">guard</span><span class="w"> </span><span class="n">firstOver</span><span class="w"> </span><span class="mi">3</span><span class="w"> </span><span class="o">[</span><span class="mi">1</span><span class="o">,</span><span class="w"> </span><span class="mi">2</span><span class="o">,</span><span class="w"> </span><span class="mi">4</span><span class="o">,</span><span class="w"> </span><span class="mi">5</span><span class="o">]</span><span class="w"> </span><span class="bp">==</span><span class="w"> </span><span class="n">some</span><span class="w"> </span><span class="mi">4</span>
+<span class="bp">#</span><span class="n">guard</span><span class="w"> </span><span class="n">firstOver</span><span class="w"> </span><span class="mi">10</span><span class="w"> </span><span class="o">[</span><span class="mi">1</span><span class="o">,</span><span class="w"> </span><span class="mi">2</span><span class="o">,</span><span class="w"> </span><span class="mi">4</span><span class="o">,</span><span class="w"> </span><span class="mi">5</span><span class="o">]</span><span class="w"> </span><span class="bp">==</span><span class="w"> </span><span class="n">none</span>
+
+<span class="c1">-- Combine find? with map for safe lookups in association lists</span>
+<span class="kn">def</span><span class="w"> </span><span class="n">scores</span><span class="w"> </span><span class="o">:</span><span class="w"> </span><span class="n">List</span><span class="w"> </span><span class="o">(</span><span class="n">String</span><span class="w"> </span><span class="bp">×</span><span class="w"> </span><span class="n">Nat</span><span class="o">)</span><span class="w"> </span><span class="o">:=</span><span class="w"> </span><span class="o">[(</span><span class="s2">"Alice"</span><span class="o">,</span><span class="w"> </span><span class="mi">95</span><span class="o">),</span><span class="w"> </span><span class="o">(</span><span class="s2">"Bob"</span><span class="o">,</span><span class="w"> </span><span class="mi">80</span><span class="o">)]</span>
+
+<span class="kn">def</span><span class="w"> </span><span class="n">grade</span><span class="w"> </span><span class="o">(</span><span class="n">name</span><span class="w"> </span><span class="o">:</span><span class="w"> </span><span class="n">String</span><span class="o">)</span><span class="w"> </span><span class="o">:</span><span class="w"> </span><span class="n">String</span><span class="w"> </span><span class="o">:=</span>
+<span class="w">  </span><span class="k">match</span><span class="w"> </span><span class="o">(</span><span class="n">scores</span><span class="bp">.</span><span class="n">find?</span><span class="w"> </span><span class="o">(</span><span class="bp">·.</span><span class="m">1</span><span class="w"> </span><span class="bp">==</span><span class="w"> </span><span class="n">name</span><span class="o">))</span><span class="bp">.</span><span class="n">map</span><span class="w"> </span><span class="o">(</span><span class="bp">·.</span><span class="m">2</span><span class="o">)</span><span class="w"> </span><span class="k">with</span>
+<span class="w">  </span><span class="bp">|</span><span class="w"> </span><span class="n">some</span><span class="w"> </span><span class="n">s</span><span class="w"> </span><span class="bp">=&gt;</span><span class="w"> </span><span class="k">if</span><span class="w"> </span><span class="n">s</span><span class="w"> </span><span class="bp">&gt;=</span><span class="w"> </span><span class="mi">90</span><span class="w"> </span><span class="k">then</span><span class="w"> </span><span class="s2">"A"</span><span class="w"> </span><span class="k">else</span><span class="w"> </span><span class="s2">"B"</span>
+<span class="w">  </span><span class="bp">|</span><span class="w"> </span><span class="n">none</span><span class="w">   </span><span class="bp">=&gt;</span><span class="w"> </span><span class="s2">"unknown"</span>
+
+<span class="bp">#</span><span class="n">eval</span><span class="w"> </span><span class="n">grade</span><span class="w"> </span><span class="s2">"Alice"</span><span class="w">    </span><span class="c1">-- "A"</span>
+<span class="bp">#</span><span class="n">eval</span><span class="w"> </span><span class="n">grade</span><span class="w"> </span><span class="s2">"Bob"</span><span class="w">      </span><span class="c1">-- "B"</span>
+<span class="bp">#</span><span class="n">eval</span><span class="w"> </span><span class="n">grade</span><span class="w"> </span><span class="s2">"Carol"</span><span class="w">    </span><span class="c1">-- "unknown"</span>
+</code></pre></div>
+</div>
+<h2>Exercises</h2>
+<h3>Safe Head</h3>
+<ul>
+<li>Write <code>safeHead : List α → Option α</code> that returns the first element or <code>none</code> for an empty list</li>
+<li>Verify it on both an empty list and a non-empty list using <code>#guard</code></li>
+</ul>
+<h3>Chain of Divisions</h3>
+<ul>
+<li>Using <code>do</code> notation, divide 120 by three separate inputs in sequence</li>
+<li>Return <code>none</code> if any divisor is zero, or <code>some</code> of the final quotient otherwise</li>
+<li>Verify three cases: all non-zero, first divisor zero, third divisor zero</li>
+</ul>
+<h3>Lookup with Default</h3>
+<ul>
+<li>Given <code>scores : List (String × Nat)</code>, write a function that returns the score for a name formatted as a string</li>
+<li>Return <code>"not found"</code> when the name is absent</li>
+</ul>
+<h3>Parse Rows</h3>
+<ul>
+<li>Given a list of strings in <code>"name,score"</code> format, use <code>filterMap</code> and <code>String.splitOn</code> to extract valid <code>(String × Nat)</code> pairs</li>
+<li>Skip any string that does not contain exactly one comma or whose score is not a valid number</li>
+<li>Use <code>String.toNat?</code> for parsing</li>
+</ul>
+<h3>All Present</h3>
+<ul>
+<li>Write <code>allPresent : List (Option α) → Option (List α)</code> that returns <code>some</code> of the unwrapped list if every element is <code>some</code>, or <code>none</code> if any element is <code>none</code></li>
+<li>Verify on <code>[some 1, some 2, some 3]</code> and <code>[some 1, none, some 3]</code></li>
+</ul>
+</main>
+<footer aria-label="Page navigation">
+<div class="row">
+<div class="col-3 left">
+<span aria-hidden="true">⇐</span> <a href="../adts/">Algebraic Data Types</a>
+</div>
+<div class="col-6 center">
+<a href="../">sdxl</a>
+	  ©
+	  <a href="../#acknowledgments">the authors</a>
+</div>
+<div class="col-3 right">
+<a href="../effect/">Error Handling and IO</a> <span aria-hidden="true">⇒</span>
+</div>
+</div>
+</footer>
+</body>
+</html>

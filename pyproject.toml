@@ -43,6 +43,7 @@ brand = "sdxl"
 repo = "https://github.com/gvwilson/webllm"
 skips = [
     "**/*~",
+    "**/*.lean",
     "docs/**",
     "log/**",
     "uv.lock"

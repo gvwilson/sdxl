@@ -1,0 +1,190 @@
+<!DOCTYPE html>
+
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Values, Types, and Functions</title>
+<meta content="Software Design by Example in Lean" name="description"/>
+<link href="../_static/favicon.ico" rel="icon" type="image/x-icon"/>
+<link href="../_static/pygments.css" rel="stylesheet" type="text/css"/>
+<link href="../_static/chota.css" rel="stylesheet" type="text/css"/>
+<link href="../_static/mccole.css" rel="stylesheet" type="text/css"/>
+</head>
+<body>
+<a class="skip-link" href="#main-content">Skip to main content</a>
+<nav aria-label="Site navigation" class="nav">
+<div class="nav-left">
+<a class="brand" href="../">sdxl</a>
+<div class="dropdown">
+<button aria-controls="nav-lessons" aria-haspopup="true">Lessons</button>
+<ul class="dropdown-content" id="nav-lessons">
+<li><a href="../intro/">Introduction</a></li>
+<li><a class="active" href="../vals/">Values, Types, and Functions</a></li>
+<li><a href="../adts/">Algebraic Data Types</a></li>
+<li><a href="../option/">The Option Type</a></li>
+<li><a href="../effect/">Error Handling and IO</a></li>
+<li><a href="../classes/">Type Classes and Recursion</a></li>
+<li><a href="../oop/">Objects and Classes</a></li>
+<li><a href="../dup/">Finding Duplicate Files</a></li>
+<li><a href="../glob/">Matching Patterns</a></li>
+<li><a href="../parse/">Parsing Text</a></li>
+<li><a href="../test/">Running Tests</a></li>
+<li><a href="../interp/">An Interpreter</a></li>
+<li><a href="../func/">Functions and Closures</a></li>
+<li><a href="../archive/">A File Archiver</a></li>
+<li><a href="../check/">An HTML Validator</a></li>
+<li><a href="../template/">A Template Expander</a></li>
+<li><a href="../lint/">A Code Linter</a></li>
+<li><a href="../layout/">Page Layout</a></li>
+<li><a href="../binary/">Binary Data</a></li>
+<li><a href="../db/">A Database</a></li>
+<li><a href="../build/">A Build Manager</a></li>
+<li><a href="../pack/">A Package Manager</a></li>
+<li><a href="../vm/">A Virtual Machine</a></li>
+<li><a href="../docgen/">Generating Documentation</a></li>
+<li><a href="../finale/">Conclusion</a></li>
+</ul>
+</div>
+<div class="dropdown">
+<button aria-controls="nav-appendices" aria-haspopup="true">Appendices</button>
+<ul class="dropdown-content" id="nav-appendices">
+<li><a href="../license/">License</a></li>
+<li><a href="../conduct/">Code of Conduct</a></li>
+<li><a href="../contributing/">Contributing</a></li>
+<li><a href="../bibliography/">Bibliography</a></li>
+<li><a href="../glossary/">Glossary</a></li>
+</ul>
+</div>
+<a href="https://github.com/gvwilson/webllm">Repository</a>
+</div>
+</nav>
+<main id="main-content">
+<h1>Values, Types, and Functions</h1>
+<h2>Types and Values</h2>
+<ul>
+<li>Every value in Lean has a type; <code>: T</code> annotates a type explicitly, and the compiler rejects mismatches before the program runs</li>
+<li><code>def</code> introduces a named definition; <code>#eval</code> prints its value at compile time</li>
+<li>Basic scalar types: <code>Int</code> (signed integers), <code>Nat</code> (non-negative integers), <code>Bool</code>, <code>String</code>, <code>Float</code></li>
+<li><code>#guard</code> checks a boolean expression at compile time; a failing guard is a build error, not a runtime crash</li>
+<li><code>let</code> binds a local name inside a function body; the binding is immutable, like a variable in an equation</li>
+<li><code>abbrev</code> creates a transparent alias for an existing type without introducing a new one</li>
+<li>String interpolation <code>s!"text {expr}"</code> converts any value to text without an explicit conversion call</li>
+</ul>
+<div data-inc="types.lean"><span aria-label="Source: vals/types.lean" class="inc-path" role="img" tabindex="0" title="vals/types.lean">i</span><div class="codehilite"><pre class="" tabindex="0"><span></span><code><span class="c1">-- Every value has a type; Int is signed, Nat is non-negative</span>
+<span class="kn">def</span><span class="w"> </span><span class="n">answer</span><span class="w"> </span><span class="o">:</span><span class="w"> </span><span class="n">Int</span><span class="w"> </span><span class="o">:=</span><span class="w"> </span><span class="mi">6</span><span class="w"> </span><span class="bp">*</span><span class="w"> </span><span class="mi">7</span>
+<span class="kn">def</span><span class="w"> </span><span class="n">greeting</span><span class="w"> </span><span class="o">:</span><span class="w"> </span><span class="n">String</span><span class="w"> </span><span class="o">:=</span><span class="w"> </span><span class="s2">"hello"</span>
+<span class="kn">def</span><span class="w"> </span><span class="n">passed</span><span class="w"> </span><span class="o">:</span><span class="w"> </span><span class="n">Bool</span><span class="w"> </span><span class="o">:=</span><span class="w"> </span><span class="n">true</span>
+
+<span class="c1">-- #eval prints a value at compile time</span>
+<span class="bp">#</span><span class="n">eval</span><span class="w"> </span><span class="n">answer</span><span class="w">      </span><span class="c1">-- 42</span>
+<span class="bp">#</span><span class="n">eval</span><span class="w"> </span><span class="n">greeting</span><span class="w">    </span><span class="c1">-- "hello"</span>
+
+<span class="c1">-- #guard asserts at compile time; a failing guard is a build error</span>
+<span class="bp">#</span><span class="n">guard</span><span class="w"> </span><span class="n">answer</span><span class="w"> </span><span class="bp">==</span><span class="w"> </span><span class="mi">42</span>
+<span class="bp">#</span><span class="n">guard</span><span class="w"> </span><span class="n">greeting</span><span class="bp">.</span><span class="n">length</span><span class="w"> </span><span class="bp">==</span><span class="w"> </span><span class="mi">5</span>
+
+<span class="c1">-- let binds a local immutable name inside a definition</span>
+<span class="kn">def</span><span class="w"> </span><span class="n">circleArea</span><span class="w"> </span><span class="o">(</span><span class="n">r</span><span class="w"> </span><span class="o">:</span><span class="w"> </span><span class="n">Float</span><span class="o">)</span><span class="w"> </span><span class="o">:</span><span class="w"> </span><span class="n">Float</span><span class="w"> </span><span class="o">:=</span>
+<span class="w">  </span><span class="k">let</span><span class="w"> </span><span class="n">pi</span><span class="w"> </span><span class="o">:</span><span class="w"> </span><span class="n">Float</span><span class="w"> </span><span class="o">:=</span><span class="w"> </span><span class="mf">3.14159265</span>
+<span class="w">  </span><span class="n">pi</span><span class="w"> </span><span class="bp">*</span><span class="w"> </span><span class="n">r</span><span class="w"> </span><span class="bp">*</span><span class="w"> </span><span class="n">r</span>
+
+<span class="bp">#</span><span class="n">eval</span><span class="w"> </span><span class="n">circleArea</span><span class="w"> </span><span class="mf">2.0</span><span class="w">    </span><span class="c1">-- 12.5663706</span>
+
+<span class="c1">-- abbrev creates a transparent alias for an existing type</span>
+<span class="kn">abbrev</span><span class="w"> </span><span class="n">Name</span><span class="w">  </span><span class="bp">=</span><span class="w"> </span><span class="n">String</span>
+<span class="kn">abbrev</span><span class="w"> </span><span class="n">Score</span><span class="w"> </span><span class="bp">=</span><span class="w"> </span><span class="n">Nat</span>
+
+<span class="c1">-- s!"..." converts expressions to text inline</span>
+<span class="kn">def</span><span class="w"> </span><span class="n">report</span><span class="w"> </span><span class="o">(</span><span class="n">n</span><span class="w"> </span><span class="o">:</span><span class="w"> </span><span class="n">Name</span><span class="o">)</span><span class="w"> </span><span class="o">(</span><span class="n">s</span><span class="w"> </span><span class="o">:</span><span class="w"> </span><span class="n">Score</span><span class="o">)</span><span class="w"> </span><span class="o">:</span><span class="w"> </span><span class="n">String</span><span class="w"> </span><span class="o">:=</span>
+<span class="w">  </span><span class="n">s!</span><span class="s2">"{n} scored {s} points"</span>
+
+<span class="bp">#</span><span class="n">eval</span><span class="w"> </span><span class="n">report</span><span class="w"> </span><span class="s2">"Alice"</span><span class="w"> </span><span class="mi">95</span><span class="w">    </span><span class="c1">-- "Alice scored 95 points"</span>
+</code></pre></div>
+</div>
+<h2>Lists and Lambdas</h2>
+<ul>
+<li><code>List α</code> holds a sequence of values of the same type; write <code>[a, b, c]</code> for a literal</li>
+<li><code>List.map f xs</code> applies <code>f</code> to every element and collects the results in a new list</li>
+<li><code>List.filter p xs</code> keeps only the elements for which predicate <code>p</code> returns <code>true</code></li>
+<li><code>List.foldl f init xs</code> threads an accumulator through the list from left to right</li>
+<li>Lambda functions are written <code>fun x =&gt; body</code>; use <code>·</code> as a placeholder for simple cases: <code>(· * 2)</code> means <code>fun x =&gt; x * 2</code></li>
+<li>Tuple types are written <code>α × β</code>; construct with <code>(a, b)</code> and access elements with <code>.1</code> and <code>.2</code></li>
+<li><code>List (String × Nat)</code> is the standard pattern for key-value data without importing a map library</li>
+</ul>
+<div data-inc="lists.lean"><span aria-label="Source: vals/lists.lean" class="inc-path" role="img" tabindex="0" title="vals/lists.lean">i</span><div class="codehilite"><pre class="" tabindex="0"><span></span><code><span class="c1">-- List literal; all elements share the same type</span>
+<span class="kn">def</span><span class="w"> </span><span class="n">primes</span><span class="w"> </span><span class="o">:</span><span class="w"> </span><span class="n">List</span><span class="w"> </span><span class="n">Nat</span><span class="w"> </span><span class="o">:=</span><span class="w"> </span><span class="o">[</span><span class="mi">2</span><span class="o">,</span><span class="w"> </span><span class="mi">3</span><span class="o">,</span><span class="w"> </span><span class="mi">5</span><span class="o">,</span><span class="w"> </span><span class="mi">7</span><span class="o">,</span><span class="w"> </span><span class="mi">11</span><span class="o">]</span>
+
+<span class="c1">-- map transforms every element</span>
+<span class="bp">#</span><span class="n">eval</span><span class="w"> </span><span class="n">primes</span><span class="bp">.</span><span class="n">map</span><span class="w"> </span><span class="o">(</span><span class="bp">·</span><span class="w"> </span><span class="bp">*</span><span class="w"> </span><span class="mi">2</span><span class="o">)</span><span class="w">      </span><span class="c1">-- [4, 6, 10, 14, 22]</span>
+
+<span class="c1">-- filter keeps only matching elements</span>
+<span class="bp">#</span><span class="n">eval</span><span class="w"> </span><span class="n">primes</span><span class="bp">.</span><span class="n">filter</span><span class="w"> </span><span class="o">(</span><span class="bp">·</span><span class="w"> </span><span class="bp">&gt;</span><span class="w"> </span><span class="mi">5</span><span class="o">)</span><span class="w">   </span><span class="c1">-- [7, 11]</span>
+
+<span class="c1">-- foldl accumulates from the left: foldl f init [a,b,c] = f (f (f init a) b) c</span>
+<span class="kn">def</span><span class="w"> </span><span class="n">total</span><span class="w"> </span><span class="o">:</span><span class="w"> </span><span class="n">List</span><span class="w"> </span><span class="n">Int</span><span class="w"> </span><span class="bp">→</span><span class="w"> </span><span class="n">Int</span><span class="w"> </span><span class="o">:=</span><span class="w"> </span><span class="n">List</span><span class="bp">.</span><span class="n">foldl</span><span class="w"> </span><span class="o">(</span><span class="bp">·</span><span class="w"> </span><span class="bp">+</span><span class="w"> </span><span class="bp">·</span><span class="o">)</span><span class="w"> </span><span class="mi">0</span>
+<span class="bp">#</span><span class="n">guard</span><span class="w"> </span><span class="n">total</span><span class="w"> </span><span class="o">[</span><span class="mi">1</span><span class="o">,</span><span class="w"> </span><span class="mi">2</span><span class="o">,</span><span class="w"> </span><span class="mi">3</span><span class="o">,</span><span class="w"> </span><span class="mi">4</span><span class="o">,</span><span class="w"> </span><span class="mi">5</span><span class="o">]</span><span class="w"> </span><span class="bp">==</span><span class="w"> </span><span class="mi">15</span>
+
+<span class="c1">-- Tuple type α × β; construct with (a, b); access with .1 and .2</span>
+<span class="kn">def</span><span class="w"> </span><span class="n">pair</span><span class="w"> </span><span class="o">:</span><span class="w"> </span><span class="n">String</span><span class="w"> </span><span class="bp">×</span><span class="w"> </span><span class="n">Nat</span><span class="w"> </span><span class="o">:=</span><span class="w"> </span><span class="o">(</span><span class="s2">"Alice"</span><span class="o">,</span><span class="w"> </span><span class="mi">30</span><span class="o">)</span>
+<span class="bp">#</span><span class="n">guard</span><span class="w"> </span><span class="n">pair</span><span class="bp">.</span><span class="m">1</span><span class="w"> </span><span class="bp">==</span><span class="w"> </span><span class="s2">"Alice"</span>
+<span class="bp">#</span><span class="n">guard</span><span class="w"> </span><span class="n">pair</span><span class="bp">.</span><span class="m">2</span><span class="w"> </span><span class="bp">==</span><span class="w"> </span><span class="mi">30</span>
+
+<span class="c1">-- List of tuples is the standard key-value structure</span>
+<span class="kn">def</span><span class="w"> </span><span class="n">scores</span><span class="w"> </span><span class="o">:</span><span class="w"> </span><span class="n">List</span><span class="w"> </span><span class="o">(</span><span class="n">String</span><span class="w"> </span><span class="bp">×</span><span class="w"> </span><span class="n">Nat</span><span class="o">)</span><span class="w"> </span><span class="o">:=</span><span class="w"> </span><span class="o">[(</span><span class="s2">"Alice"</span><span class="o">,</span><span class="w"> </span><span class="mi">95</span><span class="o">),</span><span class="w"> </span><span class="o">(</span><span class="s2">"Bob"</span><span class="o">,</span><span class="w"> </span><span class="mi">80</span><span class="o">),</span><span class="w"> </span><span class="o">(</span><span class="s2">"Carol"</span><span class="o">,</span><span class="w"> </span><span class="mi">90</span><span class="o">)]</span>
+
+<span class="c1">-- Lambda with tuple destructuring</span>
+<span class="bp">#</span><span class="n">eval</span><span class="w"> </span><span class="n">scores</span><span class="bp">.</span><span class="n">map</span><span class="w"> </span><span class="o">(</span><span class="k">fun</span><span class="w"> </span><span class="o">(</span><span class="n">name</span><span class="o">,</span><span class="w"> </span><span class="n">score</span><span class="o">)</span><span class="w"> </span><span class="bp">=&gt;</span><span class="w"> </span><span class="n">s!</span><span class="s2">"{name}: {score}"</span><span class="o">)</span>
+<span class="c1">-- ["Alice: 95", "Bob: 80", "Carol: 90"]</span>
+
+<span class="c1">-- foldl with a multi-argument lambda to find the highest score</span>
+<span class="kn">def</span><span class="w"> </span><span class="n">best</span><span class="w"> </span><span class="o">(</span><span class="n">xs</span><span class="w"> </span><span class="o">:</span><span class="w"> </span><span class="n">List</span><span class="w"> </span><span class="o">(</span><span class="n">String</span><span class="w"> </span><span class="bp">×</span><span class="w"> </span><span class="n">Nat</span><span class="o">))</span><span class="w"> </span><span class="o">:</span><span class="w"> </span><span class="n">Nat</span><span class="w"> </span><span class="o">:=</span>
+<span class="w">  </span><span class="n">xs</span><span class="bp">.</span><span class="n">foldl</span><span class="w"> </span><span class="o">(</span><span class="k">fun</span><span class="w"> </span><span class="n">hi</span><span class="w"> </span><span class="o">(</span><span class="bp">_</span><span class="o">,</span><span class="w"> </span><span class="n">s</span><span class="o">)</span><span class="w"> </span><span class="bp">=&gt;</span><span class="w"> </span><span class="n">max</span><span class="w"> </span><span class="n">hi</span><span class="w"> </span><span class="n">s</span><span class="o">)</span><span class="w"> </span><span class="mi">0</span>
+
+<span class="bp">#</span><span class="n">guard</span><span class="w"> </span><span class="n">best</span><span class="w"> </span><span class="n">scores</span><span class="w"> </span><span class="bp">==</span><span class="w"> </span><span class="mi">95</span>
+</code></pre></div>
+</div>
+<h2>Exercises</h2>
+<h3>Celsius to Fahrenheit</h3>
+<ul>
+<li>Write <code>celsiusToFahrenheit : Float → Float</code> using the formula <code>(c * 9.0 / 5.0) + 32.0</code></li>
+<li>Use <code>#guard</code> to verify that 0 degrees converts to 32.0 and 100 degrees converts to 212.0</li>
+</ul>
+<h3>Word Lengths</h3>
+<ul>
+<li>Given a <code>List String</code>, use <code>map</code> to produce a <code>List Nat</code> containing the length of each word</li>
+<li>Use <code>String.length</code> to measure a string</li>
+</ul>
+<h3>Running Total</h3>
+<ul>
+<li>Use <code>foldl</code> and a lambda to compute the sum of a <code>List Int</code></li>
+<li>Rewrite it as a recursive function and verify both versions produce the same result on <code>[1, 2, 3, 4, 5]</code></li>
+</ul>
+<h3>Pair Swap</h3>
+<ul>
+<li>Write <code>swap : α × β → β × α</code> that exchanges the two elements of a pair</li>
+<li>Verify with <code>#guard</code> that <code>swap ("hello", 42) == (42, "hello")</code></li>
+</ul>
+<h3>Filtered Sum</h3>
+<ul>
+<li>Use <code>filter</code> and <code>foldl</code> together to sum only the even numbers in a <code>List Int</code></li>
+<li>Verify the result on <code>[1, 2, 3, 4, 5, 6]</code> is 12</li>
+</ul>
+</main>
+<footer aria-label="Page navigation">
+<div class="row">
+<div class="col-3 left">
+<span aria-hidden="true">⇐</span> <a href="../intro/">Introduction</a>
+</div>
+<div class="col-6 center">
+<a href="../">sdxl</a>
+	  ©
+	  <a href="../#acknowledgments">the authors</a>
+</div>
+<div class="col-3 right">
+<a href="../adts/">Algebraic Data Types</a> <span aria-hidden="true">⇒</span>
+</div>
+</div>
+</footer>
+</body>
+</html>

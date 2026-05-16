@@ -3,11 +3,19 @@
 <div class="row" markdown="1">
 <div class="col-6" markdown="1">
 
-## Lessons
-
 <div id="lessons" markdown="1">
 
+## Lean4
+
 1.  [Introduction](@/intro/)
+1.  [Values, Types, and Functions](@/vals/)
+1.  [Algebraic Data Types](@/adts/)
+1.  [The Option Type](@/option/)
+1.  [Error Handling and IO](@/effect/)
+1.  [Type Classes and Recursion](@/classes/)
+
+## Designs
+
 1.  [Objects and Classes](@/oop/)
 1.  [Finding Duplicate Files](@/dup/)
 1.  [Matching Patterns](@/glob/)

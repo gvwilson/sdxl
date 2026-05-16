@@ -1,0 +1,215 @@
+<!DOCTYPE html>
+
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Type Classes and Recursion</title>
+<meta content="Software Design by Example in Lean" name="description"/>
+<link href="../_static/favicon.ico" rel="icon" type="image/x-icon"/>
+<link href="../_static/pygments.css" rel="stylesheet" type="text/css"/>
+<link href="../_static/chota.css" rel="stylesheet" type="text/css"/>
+<link href="../_static/mccole.css" rel="stylesheet" type="text/css"/>
+</head>
+<body>
+<a class="skip-link" href="#main-content">Skip to main content</a>
+<nav aria-label="Site navigation" class="nav">
+<div class="nav-left">
+<a class="brand" href="../">sdxl</a>
+<div class="dropdown">
+<button aria-controls="nav-lessons" aria-haspopup="true">Lessons</button>
+<ul class="dropdown-content" id="nav-lessons">
+<li><a href="../intro/">Introduction</a></li>
+<li><a href="../vals/">Values, Types, and Functions</a></li>
+<li><a href="../adts/">Algebraic Data Types</a></li>
+<li><a href="../option/">The Option Type</a></li>
+<li><a href="../effect/">Error Handling and IO</a></li>
+<li><a class="active" href="../classes/">Type Classes and Recursion</a></li>
+<li><a href="../oop/">Objects and Classes</a></li>
+<li><a href="../dup/">Finding Duplicate Files</a></li>
+<li><a href="../glob/">Matching Patterns</a></li>
+<li><a href="../parse/">Parsing Text</a></li>
+<li><a href="../test/">Running Tests</a></li>
+<li><a href="../interp/">An Interpreter</a></li>
+<li><a href="../func/">Functions and Closures</a></li>
+<li><a href="../archive/">A File Archiver</a></li>
+<li><a href="../check/">An HTML Validator</a></li>
+<li><a href="../template/">A Template Expander</a></li>
+<li><a href="../lint/">A Code Linter</a></li>
+<li><a href="../layout/">Page Layout</a></li>
+<li><a href="../binary/">Binary Data</a></li>
+<li><a href="../db/">A Database</a></li>
+<li><a href="../build/">A Build Manager</a></li>
+<li><a href="../pack/">A Package Manager</a></li>
+<li><a href="../vm/">A Virtual Machine</a></li>
+<li><a href="../docgen/">Generating Documentation</a></li>
+<li><a href="../finale/">Conclusion</a></li>
+</ul>
+</div>
+<div class="dropdown">
+<button aria-controls="nav-appendices" aria-haspopup="true">Appendices</button>
+<ul class="dropdown-content" id="nav-appendices">
+<li><a href="../license/">License</a></li>
+<li><a href="../conduct/">Code of Conduct</a></li>
+<li><a href="../contributing/">Contributing</a></li>
+<li><a href="../bibliography/">Bibliography</a></li>
+<li><a href="../glossary/">Glossary</a></li>
+</ul>
+</div>
+<a href="https://github.com/gvwilson/webllm">Repository</a>
+</div>
+</nav>
+<main id="main-content">
+<h1>Type Classes and Recursion</h1>
+<h2>Type Classes</h2>
+<ul>
+<li>A <code>class</code> defines an interface: a set of functions that any type can implement</li>
+<li>An <code>instance</code> declaration provides the implementation for one specific type; Lean selects the right instance by type inference at the call site</li>
+<li>Write <code>{α : Type} [ClassName α]</code> to say a function works for any type that has an instance; the compiler rejects calls with types that do not</li>
+<li><code>deriving BEq</code> generates an <code>==</code> instance automatically; <code>deriving Hashable</code> does the same for hashing; <code>deriving Repr</code> enables <code>#eval</code></li>
+<li>Any type can get an instance at any time without modifying the type definition, unlike inheritance which requires a shared base class</li>
+</ul>
+<div data-inc="typeclass.lean"><span aria-label="Source: classes/typeclass.lean" class="inc-path" role="img" tabindex="0" title="classes/typeclass.lean">i</span><div class="codehilite"><pre class="" tabindex="0"><span></span><code><span class="c1">-- class defines an interface: a set of functions any type can implement</span>
+<span class="kn">class</span><span class="w"> </span><span class="n">Describable</span><span class="w"> </span><span class="o">(</span><span class="n">α</span><span class="w"> </span><span class="o">:</span><span class="w"> </span><span class="kt">Type</span><span class="o">)</span><span class="w"> </span><span class="kn">where</span>
+<span class="w">  </span><span class="n">describe</span><span class="w"> </span><span class="o">:</span><span class="w"> </span><span class="n">α</span><span class="w"> </span><span class="bp">→</span><span class="w"> </span><span class="n">String</span>
+
+<span class="c1">-- Concrete types have no knowledge of each other</span>
+<span class="kn">structure</span><span class="w"> </span><span class="n">Point</span><span class="w"> </span><span class="kn">where</span>
+<span class="w">  </span><span class="n">x</span><span class="w"> </span><span class="n">y</span><span class="w"> </span><span class="o">:</span><span class="w"> </span><span class="n">Float</span>
+<span class="w">  </span><span class="n">deriving</span><span class="w"> </span><span class="n">Repr</span>
+
+<span class="kn">structure</span><span class="w"> </span><span class="n">Color</span><span class="w"> </span><span class="kn">where</span>
+<span class="w">  </span><span class="n">r</span><span class="w"> </span><span class="n">g</span><span class="w"> </span><span class="n">b</span><span class="w"> </span><span class="o">:</span><span class="w"> </span><span class="n">Nat</span>
+<span class="w">  </span><span class="n">deriving</span><span class="w"> </span><span class="n">Repr</span>
+
+<span class="c1">-- instance provides the implementation for a specific type</span>
+<span class="kn">instance</span><span class="w"> </span><span class="o">:</span><span class="w"> </span><span class="n">Describable</span><span class="w"> </span><span class="n">Point</span><span class="w"> </span><span class="kn">where</span>
+<span class="w">  </span><span class="n">describe</span><span class="w"> </span><span class="n">p</span><span class="w"> </span><span class="o">:=</span><span class="w"> </span><span class="n">s!</span><span class="s2">"({p.x}, {p.y})"</span>
+
+<span class="kn">instance</span><span class="w"> </span><span class="o">:</span><span class="w"> </span><span class="n">Describable</span><span class="w"> </span><span class="n">Color</span><span class="w"> </span><span class="kn">where</span>
+<span class="w">  </span><span class="n">describe</span><span class="w"> </span><span class="n">c</span><span class="w"> </span><span class="o">:=</span><span class="w"> </span><span class="n">s!</span><span class="s2">"rgb({c.r}, {c.g}, {c.b})"</span>
+
+<span class="c1">-- [Describable α] constrains the type variable: works for any type with an instance</span>
+<span class="kn">def</span><span class="w"> </span><span class="n">label</span><span class="w"> </span><span class="o">{</span><span class="n">α</span><span class="w"> </span><span class="o">:</span><span class="w"> </span><span class="kt">Type</span><span class="o">}</span><span class="w"> </span><span class="o">[</span><span class="n">Describable</span><span class="w"> </span><span class="n">α</span><span class="o">]</span><span class="w"> </span><span class="o">(</span><span class="n">x</span><span class="w"> </span><span class="o">:</span><span class="w"> </span><span class="n">α</span><span class="o">)</span><span class="w"> </span><span class="o">:</span><span class="w"> </span><span class="n">String</span><span class="w"> </span><span class="o">:=</span>
+<span class="w">  </span><span class="n">s!</span><span class="s2">"value: {Describable.describe x}"</span>
+
+<span class="kn">def</span><span class="w"> </span><span class="n">p1</span><span class="w"> </span><span class="o">:</span><span class="w"> </span><span class="n">Point</span><span class="w"> </span><span class="o">:=</span><span class="w"> </span><span class="o">{</span><span class="w"> </span><span class="n">x</span><span class="w"> </span><span class="o">:=</span><span class="w"> </span><span class="mf">1.0</span><span class="o">,</span><span class="w"> </span><span class="n">y</span><span class="w"> </span><span class="o">:=</span><span class="w"> </span><span class="mf">2.0</span><span class="w"> </span><span class="o">}</span>
+<span class="kn">def</span><span class="w"> </span><span class="n">c1</span><span class="w"> </span><span class="o">:</span><span class="w"> </span><span class="n">Color</span><span class="w"> </span><span class="o">:=</span><span class="w"> </span><span class="o">{</span><span class="w"> </span><span class="n">r</span><span class="w"> </span><span class="o">:=</span><span class="w"> </span><span class="mi">255</span><span class="o">,</span><span class="w"> </span><span class="n">g</span><span class="w"> </span><span class="o">:=</span><span class="w"> </span><span class="mi">0</span><span class="o">,</span><span class="w"> </span><span class="n">b</span><span class="w"> </span><span class="o">:=</span><span class="w"> </span><span class="mi">0</span><span class="w"> </span><span class="o">}</span>
+
+<span class="bp">#</span><span class="n">eval</span><span class="w"> </span><span class="n">label</span><span class="w"> </span><span class="n">p1</span><span class="w">    </span><span class="c1">-- "value: (1.0, 2.0)"</span>
+<span class="bp">#</span><span class="n">eval</span><span class="w"> </span><span class="n">label</span><span class="w"> </span><span class="n">c1</span><span class="w">    </span><span class="c1">-- "value: rgb(255, 0, 0)"</span>
+
+<span class="c1">-- The same constraint applies to list operations</span>
+<span class="kn">def</span><span class="w"> </span><span class="n">describeAll</span><span class="w"> </span><span class="o">{</span><span class="n">α</span><span class="w"> </span><span class="o">:</span><span class="w"> </span><span class="kt">Type</span><span class="o">}</span><span class="w"> </span><span class="o">[</span><span class="n">Describable</span><span class="w"> </span><span class="n">α</span><span class="o">]</span><span class="w"> </span><span class="o">(</span><span class="n">xs</span><span class="w"> </span><span class="o">:</span><span class="w"> </span><span class="n">List</span><span class="w"> </span><span class="n">α</span><span class="o">)</span><span class="w"> </span><span class="o">:</span><span class="w"> </span><span class="n">List</span><span class="w"> </span><span class="n">String</span><span class="w"> </span><span class="o">:=</span>
+<span class="w">  </span><span class="n">xs</span><span class="bp">.</span><span class="n">map</span><span class="w"> </span><span class="n">Describable</span><span class="bp">.</span><span class="n">describe</span>
+
+<span class="bp">#</span><span class="n">eval</span><span class="w"> </span><span class="n">describeAll</span><span class="w"> </span><span class="o">[</span><span class="n">p1</span><span class="o">,</span><span class="w"> </span><span class="o">{</span><span class="w"> </span><span class="n">x</span><span class="w"> </span><span class="o">:=</span><span class="w"> </span><span class="mf">0.0</span><span class="o">,</span><span class="w"> </span><span class="n">y</span><span class="w"> </span><span class="o">:=</span><span class="w"> </span><span class="mf">0.0</span><span class="w"> </span><span class="o">}]</span>
+<span class="c1">-- ["(1.0, 2.0)", "(0.0, 0.0)"]</span>
+
+<span class="c1">-- deriving BEq generates == without writing an instance by hand</span>
+<span class="kn">structure</span><span class="w"> </span><span class="n">Tag</span><span class="w"> </span><span class="kn">where</span>
+<span class="w">  </span><span class="n">name</span><span class="w"> </span><span class="o">:</span><span class="w"> </span><span class="n">String</span>
+<span class="w">  </span><span class="n">deriving</span><span class="w"> </span><span class="n">BEq</span><span class="o">,</span><span class="w"> </span><span class="n">Repr</span>
+
+<span class="bp">#</span><span class="n">guard</span><span class="w"> </span><span class="o">({</span><span class="w"> </span><span class="n">name</span><span class="w"> </span><span class="o">:=</span><span class="w"> </span><span class="s2">"lean"</span><span class="w"> </span><span class="o">}</span><span class="w"> </span><span class="o">:</span><span class="w"> </span><span class="n">Tag</span><span class="o">)</span><span class="w"> </span><span class="bp">==</span><span class="w"> </span><span class="o">{</span><span class="w"> </span><span class="n">name</span><span class="w"> </span><span class="o">:=</span><span class="w"> </span><span class="s2">"lean"</span><span class="w"> </span><span class="o">}</span>
+<span class="bp">#</span><span class="n">guard</span><span class="w"> </span><span class="bp">!</span><span class="o">(</span><span class="w"> </span><span class="o">({</span><span class="w"> </span><span class="n">name</span><span class="w"> </span><span class="o">:=</span><span class="w"> </span><span class="s2">"lean"</span><span class="w"> </span><span class="o">}</span><span class="w"> </span><span class="o">:</span><span class="w"> </span><span class="n">Tag</span><span class="o">)</span><span class="w"> </span><span class="bp">==</span><span class="w"> </span><span class="o">{</span><span class="w"> </span><span class="n">name</span><span class="w"> </span><span class="o">:=</span><span class="w"> </span><span class="s2">"coq"</span><span class="w"> </span><span class="o">}</span><span class="w"> </span><span class="o">)</span>
+</code></pre></div>
+</div>
+<h2>Recursion and Mutation</h2>
+<ul>
+<li>Lean checks that every recursive function terminates; it rejects functions with no provable decreasing measure</li>
+<li>Mark a function <code>partial</code> to opt out of termination checking; Lean accepts it on faith, and it may loop forever</li>
+<li><code>termination_by expr</code> supplies an explicit decreasing measure when Lean cannot infer one automatically</li>
+<li><code>where</code> attaches private helper definitions to a function, keeping them out of the module's namespace</li>
+<li><code>let mut x := v</code> inside a <code>do</code> block creates a mutable local variable; update it with <code>x := newVal</code></li>
+<li><code>Id.run do</code> runs a <code>do</code> block in the identity monad, giving access to <code>let mut</code> and <code>for</code> loops without requiring <code>IO</code></li>
+</ul>
+<div data-inc="recursion.lean"><span aria-label="Source: classes/recursion.lean" class="inc-path" role="img" tabindex="0" title="classes/recursion.lean">i</span><div class="codehilite"><pre class="" tabindex="0"><span></span><code><span class="c1">-- Structural recursion: Lean verifies the argument shrinks at each call</span>
+<span class="kn">def</span><span class="w"> </span><span class="n">sumList</span><span class="w"> </span><span class="o">:</span><span class="w"> </span><span class="n">List</span><span class="w"> </span><span class="n">Int</span><span class="w"> </span><span class="bp">→</span><span class="w"> </span><span class="n">Int</span>
+<span class="w">  </span><span class="bp">|</span><span class="w"> </span><span class="o">[]</span><span class="w">      </span><span class="bp">=&gt;</span><span class="w"> </span><span class="mi">0</span>
+<span class="w">  </span><span class="bp">|</span><span class="w"> </span><span class="n">x</span><span class="w"> </span><span class="bp">::</span><span class="w"> </span><span class="n">xs</span><span class="w"> </span><span class="bp">=&gt;</span><span class="w"> </span><span class="n">x</span><span class="w"> </span><span class="bp">+</span><span class="w"> </span><span class="n">sumList</span><span class="w"> </span><span class="n">xs</span>
+
+<span class="bp">#</span><span class="n">guard</span><span class="w"> </span><span class="n">sumList</span><span class="w"> </span><span class="o">[</span><span class="mi">1</span><span class="o">,</span><span class="w"> </span><span class="mi">2</span><span class="o">,</span><span class="w"> </span><span class="mi">3</span><span class="o">,</span><span class="w"> </span><span class="mi">4</span><span class="o">,</span><span class="w"> </span><span class="mi">5</span><span class="o">]</span><span class="w"> </span><span class="bp">==</span><span class="w"> </span><span class="mi">15</span>
+
+<span class="c1">-- termination_by: explicit measure for when Lean cannot infer one</span>
+<span class="kn">def</span><span class="w"> </span><span class="n">countdown</span><span class="w"> </span><span class="o">(</span><span class="n">n</span><span class="w"> </span><span class="o">:</span><span class="w"> </span><span class="n">Nat</span><span class="o">)</span><span class="w"> </span><span class="o">:</span><span class="w"> </span><span class="n">List</span><span class="w"> </span><span class="n">Nat</span><span class="w"> </span><span class="o">:=</span>
+<span class="w">  </span><span class="k">if</span><span class="w"> </span><span class="n">n</span><span class="w"> </span><span class="bp">==</span><span class="w"> </span><span class="mi">0</span><span class="w"> </span><span class="k">then</span><span class="w"> </span><span class="o">[</span><span class="mi">0</span><span class="o">]</span><span class="w"> </span><span class="k">else</span><span class="w"> </span><span class="n">n</span><span class="w"> </span><span class="bp">::</span><span class="w"> </span><span class="n">countdown</span><span class="w"> </span><span class="o">(</span><span class="n">n</span><span class="w"> </span><span class="bp">-</span><span class="w"> </span><span class="mi">1</span><span class="o">)</span>
+<span class="n">termination_by</span><span class="w"> </span><span class="n">n</span>
+
+<span class="bp">#</span><span class="n">guard</span><span class="w"> </span><span class="n">countdown</span><span class="w"> </span><span class="mi">3</span><span class="w"> </span><span class="bp">==</span><span class="w"> </span><span class="o">[</span><span class="mi">3</span><span class="o">,</span><span class="w"> </span><span class="mi">2</span><span class="o">,</span><span class="w"> </span><span class="mi">1</span><span class="o">,</span><span class="w"> </span><span class="mi">0</span><span class="o">]</span>
+
+<span class="c1">-- partial: opt out of termination checking; the function may loop</span>
+<span class="n">partial</span><span class="w"> </span><span class="kn">def</span><span class="w"> </span><span class="n">collatz</span><span class="w"> </span><span class="o">:</span><span class="w"> </span><span class="n">Nat</span><span class="w"> </span><span class="bp">→</span><span class="w"> </span><span class="n">List</span><span class="w"> </span><span class="n">Nat</span>
+<span class="w">  </span><span class="bp">|</span><span class="w"> </span><span class="mi">1</span><span class="w"> </span><span class="bp">=&gt;</span><span class="w"> </span><span class="o">[</span><span class="mi">1</span><span class="o">]</span>
+<span class="w">  </span><span class="bp">|</span><span class="w"> </span><span class="n">n</span><span class="w"> </span><span class="bp">=&gt;</span><span class="w"> </span><span class="n">n</span><span class="w"> </span><span class="bp">::</span><span class="w"> </span><span class="n">collatz</span><span class="w"> </span><span class="o">(</span><span class="k">if</span><span class="w"> </span><span class="n">n</span><span class="w"> </span><span class="bp">%</span><span class="w"> </span><span class="mi">2</span><span class="w"> </span><span class="bp">==</span><span class="w"> </span><span class="mi">0</span><span class="w"> </span><span class="k">then</span><span class="w"> </span><span class="n">n</span><span class="w"> </span><span class="bp">/</span><span class="w"> </span><span class="mi">2</span><span class="w"> </span><span class="k">else</span><span class="w"> </span><span class="mi">3</span><span class="w"> </span><span class="bp">*</span><span class="w"> </span><span class="n">n</span><span class="w"> </span><span class="bp">+</span><span class="w"> </span><span class="mi">1</span><span class="o">)</span>
+
+<span class="bp">#</span><span class="n">eval</span><span class="w"> </span><span class="n">collatz</span><span class="w"> </span><span class="mi">6</span><span class="w">    </span><span class="c1">-- [6, 3, 10, 5, 16, 8, 4, 2, 1]</span>
+
+<span class="c1">-- where: private helper attached to its parent, invisible outside</span>
+<span class="kn">def</span><span class="w"> </span><span class="n">frequencies</span><span class="w"> </span><span class="o">(</span><span class="n">xs</span><span class="w"> </span><span class="o">:</span><span class="w"> </span><span class="n">List</span><span class="w"> </span><span class="n">String</span><span class="o">)</span><span class="w"> </span><span class="o">:</span><span class="w"> </span><span class="n">List</span><span class="w"> </span><span class="o">(</span><span class="n">String</span><span class="w"> </span><span class="bp">×</span><span class="w"> </span><span class="n">Nat</span><span class="o">)</span><span class="w"> </span><span class="o">:=</span>
+<span class="w">  </span><span class="n">xs</span><span class="bp">.</span><span class="n">foldl</span><span class="w"> </span><span class="n">tally</span><span class="w"> </span><span class="o">[]</span>
+<span class="kn">where</span>
+<span class="w">  </span><span class="n">tally</span><span class="w"> </span><span class="o">(</span><span class="n">acc</span><span class="w"> </span><span class="o">:</span><span class="w"> </span><span class="n">List</span><span class="w"> </span><span class="o">(</span><span class="n">String</span><span class="w"> </span><span class="bp">×</span><span class="w"> </span><span class="n">Nat</span><span class="o">))</span><span class="w"> </span><span class="o">(</span><span class="n">s</span><span class="w"> </span><span class="o">:</span><span class="w"> </span><span class="n">String</span><span class="o">)</span><span class="w"> </span><span class="o">:</span><span class="w"> </span><span class="n">List</span><span class="w"> </span><span class="o">(</span><span class="n">String</span><span class="w"> </span><span class="bp">×</span><span class="w"> </span><span class="n">Nat</span><span class="o">)</span><span class="w"> </span><span class="o">:=</span>
+<span class="w">    </span><span class="k">match</span><span class="w"> </span><span class="n">acc</span><span class="bp">.</span><span class="n">find?</span><span class="w"> </span><span class="o">(</span><span class="bp">·.</span><span class="m">1</span><span class="w"> </span><span class="bp">==</span><span class="w"> </span><span class="n">s</span><span class="o">)</span><span class="w"> </span><span class="k">with</span>
+<span class="w">    </span><span class="bp">|</span><span class="w"> </span><span class="n">some</span><span class="w"> </span><span class="o">(</span><span class="bp">_</span><span class="o">,</span><span class="w"> </span><span class="n">n</span><span class="o">)</span><span class="w"> </span><span class="bp">=&gt;</span><span class="w"> </span><span class="n">acc</span><span class="bp">.</span><span class="n">map</span><span class="w"> </span><span class="k">fun</span><span class="w"> </span><span class="n">p</span><span class="w"> </span><span class="bp">=&gt;</span><span class="w"> </span><span class="k">if</span><span class="w"> </span><span class="n">p</span><span class="bp">.</span><span class="m">1</span><span class="w"> </span><span class="bp">==</span><span class="w"> </span><span class="n">s</span><span class="w"> </span><span class="k">then</span><span class="w"> </span><span class="o">(</span><span class="n">s</span><span class="o">,</span><span class="w"> </span><span class="n">n</span><span class="w"> </span><span class="bp">+</span><span class="w"> </span><span class="mi">1</span><span class="o">)</span><span class="w"> </span><span class="k">else</span><span class="w"> </span><span class="n">p</span>
+<span class="w">    </span><span class="bp">|</span><span class="w"> </span><span class="n">none</span><span class="w">        </span><span class="bp">=&gt;</span><span class="w"> </span><span class="n">acc</span><span class="w"> </span><span class="bp">++</span><span class="w"> </span><span class="o">[(</span><span class="n">s</span><span class="o">,</span><span class="w"> </span><span class="mi">1</span><span class="o">)]</span>
+
+<span class="bp">#</span><span class="n">eval</span><span class="w"> </span><span class="n">frequencies</span><span class="w"> </span><span class="o">[</span><span class="s2">"a"</span><span class="o">,</span><span class="w"> </span><span class="s2">"b"</span><span class="o">,</span><span class="w"> </span><span class="s2">"a"</span><span class="o">,</span><span class="w"> </span><span class="s2">"c"</span><span class="o">,</span><span class="w"> </span><span class="s2">"b"</span><span class="o">,</span><span class="w"> </span><span class="s2">"a"</span><span class="o">]</span>
+<span class="c1">-- [("a", 3), ("b", 2), ("c", 1)]</span>
+
+<span class="c1">-- Id.run do and let mut: local mutable state without IO</span>
+<span class="kn">def</span><span class="w"> </span><span class="n">countVowels</span><span class="w"> </span><span class="o">(</span><span class="n">s</span><span class="w"> </span><span class="o">:</span><span class="w"> </span><span class="n">String</span><span class="o">)</span><span class="w"> </span><span class="o">:</span><span class="w"> </span><span class="n">Nat</span><span class="w"> </span><span class="o">:=</span><span class="w"> </span><span class="n">Id</span><span class="bp">.</span><span class="n">run</span><span class="w"> </span><span class="k">do</span>
+<span class="w">  </span><span class="k">let</span><span class="w"> </span><span class="n">mut</span><span class="w"> </span><span class="n">n</span><span class="w"> </span><span class="o">:=</span><span class="w"> </span><span class="mi">0</span>
+<span class="w">  </span><span class="n">for</span><span class="w"> </span><span class="n">c</span><span class="w"> </span><span class="k">in</span><span class="w"> </span><span class="n">s</span><span class="bp">.</span><span class="n">toList</span><span class="w"> </span><span class="k">do</span>
+<span class="w">    </span><span class="k">if</span><span class="w"> </span><span class="s2">"aeiouAEIOU"</span><span class="bp">.</span><span class="n">contains</span><span class="w"> </span><span class="n">c</span><span class="w"> </span><span class="k">then</span>
+<span class="w">      </span><span class="n">n</span><span class="w"> </span><span class="o">:=</span><span class="w"> </span><span class="n">n</span><span class="w"> </span><span class="bp">+</span><span class="w"> </span><span class="mi">1</span>
+<span class="w">  </span><span class="n">return</span><span class="w"> </span><span class="n">n</span>
+
+<span class="bp">#</span><span class="n">guard</span><span class="w"> </span><span class="n">countVowels</span><span class="w"> </span><span class="s2">"hello world"</span><span class="w"> </span><span class="bp">==</span><span class="w"> </span><span class="mi">3</span>
+</code></pre></div>
+</div>
+<h2>Exercises</h2>
+<h3>Summable Class</h3>
+<ul>
+<li>Define <code>class Summable (α : Type)</code> with a method <code>zero : α</code> and <code>add : α → α → α</code></li>
+<li>Write instances for <code>Nat</code> and <code>Float</code></li>
+<li>Write a polymorphic <code>sumAll : [Summable α] → List α → α</code> and verify it on both types</li>
+</ul>
+<h3>Tree Depth</h3>
+<ul>
+<li>Using the <code>Tree</code> type from the Algebraic Data Types lesson, write <code>depth : Tree → Nat</code> that returns the length of the longest root-to-leaf path</li>
+<li>Verify Lean accepts the function without <code>partial</code> and that <code>Tree.Leaf</code> has depth <code>0</code></li>
+</ul>
+<h3>Fibonacci with Fuel</h3>
+<ul>
+<li>Write <code>fib (fuel n : Nat) : Nat</code> that returns the nth Fibonacci number, using <code>fuel</code> as the decreasing measure</li>
+<li>Verify <code>fib 20 10 == 55</code></li>
+</ul>
+<h3>Mutable Character Count</h3>
+<ul>
+<li>Using <code>let mut</code> and a <code>for</code> loop inside <code>Id.run do</code>, count how many times each distinct character appears in a string</li>
+<li>Return a <code>List (Char × Nat)</code> and verify it on a short string</li>
+</ul>
+<h3>Flatten Without Partial</h3>
+<ul>
+<li>Write <code>flatten : List (List α) → List α</code> using structural recursion on the outer list</li>
+<li>Verify Lean accepts it without <code>partial</code> and that <code>flatten [[1, 2], [3], [4, 5]] == [1, 2, 3, 4, 5]</code></li>
+</ul>
+</main>
+<footer aria-label="Page navigation">
+<div class="row">
+<div class="col-3 left">
+<span aria-hidden="true">⇐</span> <a href="../effect/">Error Handling and IO</a>
+</div>
+<div class="col-6 center">
+<a href="../">sdxl</a>
+	  ©
+	  <a href="../#acknowledgments">the authors</a>
+</div>
+<div class="col-3 right">
+<a href="../oop/">Objects and Classes</a> <span aria-hidden="true">⇒</span>
+</div>
+</div>
+</footer>
+</body>
+</html>
