@@ -1,0 +1,155 @@
+<!DOCTYPE html>
+
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Running Tests</title>
+<meta content="Software Design by Example in Lean" name="description"/>
+<link href="../_static/favicon.ico" rel="icon" type="image/x-icon"/>
+<link href="../_static/pygments.css" rel="stylesheet" type="text/css"/>
+<link href="../_static/chota.css" rel="stylesheet" type="text/css"/>
+<link href="../_static/mccole.css" rel="stylesheet" type="text/css"/>
+</head>
+<body>
+<a class="skip-link" href="#main-content">Skip to main content</a>
+<nav aria-label="Site navigation" class="nav">
+<div class="nav-left">
+<a class="brand" href="../">sdxl</a>
+<div class="dropdown">
+<button aria-controls="nav-lessons" aria-haspopup="true">Lessons</button>
+<ul class="dropdown-content" id="nav-lessons">
+<li><a href="../intro/">Introduction</a></li>
+<li><a href="../oop/">Objects and Classes</a></li>
+<li><a href="../dup/">Finding Duplicate Files</a></li>
+<li><a href="../glob/">Matching Patterns</a></li>
+<li><a href="../parse/">Parsing Text</a></li>
+<li><a class="active" href="../test/">Running Tests</a></li>
+<li><a href="../interp/">An Interpreter</a></li>
+<li><a href="../func/">Functions and Closures</a></li>
+<li><a href="../archive/">A File Archiver</a></li>
+<li><a href="../check/">An HTML Validator</a></li>
+<li><a href="../template/">A Template Expander</a></li>
+<li><a href="../lint/">A Code Linter</a></li>
+<li><a href="../layout/">Page Layout</a></li>
+<li><a href="../binary/">Binary Data</a></li>
+<li><a href="../db/">A Database</a></li>
+<li><a href="../build/">A Build Manager</a></li>
+<li><a href="../pack/">A Package Manager</a></li>
+<li><a href="../vm/">A Virtual Machine</a></li>
+<li><a href="../docgen/">Generating Documentation</a></li>
+<li><a href="../finale/">Conclusion</a></li>
+</ul>
+</div>
+<div class="dropdown">
+<button aria-controls="nav-appendices" aria-haspopup="true">Appendices</button>
+<ul class="dropdown-content" id="nav-appendices">
+<li><a href="../license/">License</a></li>
+<li><a href="../conduct/">Code of Conduct</a></li>
+<li><a href="../contributing/">Contributing</a></li>
+<li><a href="../bibliography/">Bibliography</a></li>
+<li><a href="../glossary/">Glossary</a></li>
+</ul>
+</div>
+<a href="https://github.com/gvwilson/webllm">Repository</a>
+</div>
+</nav>
+<main id="main-content">
+<h1>Running Tests</h1>
+<h2>Outline</h2>
+<ul>
+<li>Python's test runner uses <strong>runtime reflection</strong> to discover tests: it scans
+  dictionaries for functions whose names start with <code>test_</code>. Lean has no runtime
+  reflection, so this specific design does not translate.</li>
+<li>Instead, Lean has three complementary testing mechanisms:</li>
+<li><code>#guard</code> — compile-time boolean check; fails the build if false</li>
+<li><code>decide</code> / <code>native_decide</code> — <strong>proof tactics</strong> that close decidable propositions;
+     the result is a kernel-verified proof term, not just a check</li>
+<li><strong>LSpec</strong> (third-party) — named test suites with pass/fail reporting and
+     property-based testing via <code>SlimCheck</code></li>
+<li>This lesson therefore teaches Lean's own model and contrasts it with Python's</li>
+</ul>
+<h2>Code</h2>
+<div data-inc="code.lean"><span aria-label="Source: test/code.lean" class="inc-path" role="img" tabindex="0" title="test/code.lean">i</span><div class="codehilite"><pre class="" tabindex="0"><span></span><code><span class="c1">-- The function under test</span>
+<span class="kn">def</span><span class="w"> </span><span class="n">sign</span><span class="w"> </span><span class="o">(</span><span class="n">n</span><span class="w"> </span><span class="o">:</span><span class="w"> </span><span class="n">Int</span><span class="o">)</span><span class="w"> </span><span class="o">:</span><span class="w"> </span><span class="n">Int</span><span class="w"> </span><span class="o">:=</span>
+<span class="w">  </span><span class="k">if</span><span class="w"> </span><span class="n">n</span><span class="w"> </span><span class="bp">&gt;</span><span class="w"> </span><span class="mi">0</span><span class="w"> </span><span class="k">then</span><span class="w"> </span><span class="mi">1</span><span class="w"> </span><span class="k">else</span><span class="w"> </span><span class="k">if</span><span class="w"> </span><span class="n">n</span><span class="w"> </span><span class="bp">&lt;</span><span class="w"> </span><span class="mi">0</span><span class="w"> </span><span class="k">then</span><span class="w"> </span><span class="bp">-</span><span class="mi">1</span><span class="w"> </span><span class="k">else</span><span class="w"> </span><span class="mi">0</span>
+
+<span class="c1">-- Mechanism 1: #guard</span>
+<span class="c1">-- Evaluates at compile time; build fails if the expression is not true.</span>
+<span class="c1">-- No proof is produced — this is a quick sanity check.</span>
+<span class="bp">#</span><span class="n">guard</span><span class="w"> </span><span class="n">sign</span><span class="w"> </span><span class="mi">19</span><span class="w">   </span><span class="bp">==</span><span class="w"> </span><span class="mi">1</span>
+<span class="bp">#</span><span class="n">guard</span><span class="w"> </span><span class="n">sign</span><span class="w"> </span><span class="o">(</span><span class="bp">-</span><span class="mi">3</span><span class="o">)</span><span class="w"> </span><span class="bp">==</span><span class="w"> </span><span class="bp">-</span><span class="mi">1</span>
+<span class="bp">#</span><span class="n">guard</span><span class="w"> </span><span class="n">sign</span><span class="w"> </span><span class="mi">0</span><span class="w">    </span><span class="bp">==</span><span class="w"> </span><span class="mi">0</span>
+
+<span class="c1">-- Mechanism 2: decide</span>
+<span class="c1">-- Closes a *proof goal* by kernel evaluation.</span>
+<span class="c1">-- The result is a term of type `sign 19 = 1`, not just a Bool.</span>
+<span class="kn">theorem</span><span class="w"> </span><span class="n">sign_positive</span><span class="w"> </span><span class="o">:</span><span class="w"> </span><span class="n">sign</span><span class="w"> </span><span class="mi">19</span><span class="w"> </span><span class="bp">=</span><span class="w"> </span><span class="mi">1</span><span class="w"> </span><span class="o">:=</span><span class="w"> </span><span class="k">by</span><span class="w"> </span><span class="n">decide</span>
+<span class="kn">theorem</span><span class="w"> </span><span class="n">sign_negative</span><span class="w"> </span><span class="o">:</span><span class="w"> </span><span class="n">sign</span><span class="w"> </span><span class="o">(</span><span class="bp">-</span><span class="mi">3</span><span class="o">)</span><span class="w"> </span><span class="bp">=</span><span class="w"> </span><span class="bp">-</span><span class="mi">1</span><span class="w"> </span><span class="o">:=</span><span class="w"> </span><span class="k">by</span><span class="w"> </span><span class="n">decide</span>
+<span class="kn">theorem</span><span class="w"> </span><span class="n">sign_zero</span><span class="w">     </span><span class="o">:</span><span class="w"> </span><span class="n">sign</span><span class="w"> </span><span class="mi">0</span><span class="w"> </span><span class="bp">=</span><span class="w"> </span><span class="mi">0</span><span class="w"> </span><span class="o">:=</span><span class="w"> </span><span class="k">by</span><span class="w"> </span><span class="n">decide</span>
+
+<span class="c1">-- native_decide: same as decide but compiles to native code first.</span>
+<span class="c1">-- Use when decide times out (e.g., large Nat computations).</span>
+<span class="kn">theorem</span><span class="w"> </span><span class="n">sign_large_pos</span><span class="w"> </span><span class="o">:</span><span class="w"> </span><span class="n">sign</span><span class="w"> </span><span class="mi">1000000</span><span class="w"> </span><span class="bp">=</span><span class="w"> </span><span class="mi">1</span><span class="w"> </span><span class="o">:=</span><span class="w"> </span><span class="k">by</span><span class="w"> </span><span class="n">native_decide</span>
+
+<span class="c1">-- Mechanism 3: LSpec-style named test runner</span>
+<span class="c1">-- (Requires the LSpec package: https://github.com/lurk-lab/LSpec)</span>
+<span class="c1">-- Shown here as a pattern; remove the `-- ` prefix when LSpec is available.</span>
+<span class="c1">--</span>
+<span class="c1">-- import LSpec</span>
+<span class="c1">--</span>
+<span class="c1">-- #lspec</span>
+<span class="c1">--   test "positive" (sign 19 = 1) $</span>
+<span class="c1">--   test "negative" (sign (-3) = -1) $</span>
+<span class="c1">--   test "zero"     (sign 0 = 0)</span>
+<span class="c1">--</span>
+<span class="c1">-- For property-based testing (SlimCheck integration):</span>
+<span class="c1">--</span>
+<span class="c1">-- #lspec check "sign never exceeds 1" $ ∀ n : Int, sign n ≤ 1</span>
+
+<span class="c1">-- Key contrast with Python:</span>
+<span class="c1">-- Python: `pytest` discovers tests AT RUNTIME by scanning __dict__ for "test_*"</span>
+<span class="c1">--         functions → requires reflection, impossible in Lean.</span>
+<span class="c1">-- Lean:   tests are either compile-time checks (#guard) or proof obligations</span>
+<span class="c1">--         (decide), verified by the type-checker before the program runs.</span>
+<span class="c1">--         This makes failures impossible to miss and proofs machine-checkable.</span>
+
+<span class="c1">-- A hand-rolled test runner (to illustrate the Python lesson's idea):</span>
+<span class="c1">-- Since we cannot iterate over functions by name, we store them in a list explicitly.</span>
+<span class="kn">structure</span><span class="w"> </span><span class="n">TestCase</span><span class="w"> </span><span class="kn">where</span>
+<span class="w">  </span><span class="n">name</span><span class="w">   </span><span class="o">:</span><span class="w"> </span><span class="n">String</span>
+<span class="w">  </span><span class="n">result</span><span class="w"> </span><span class="o">:</span><span class="w"> </span><span class="n">Bool</span><span class="w">   </span><span class="c1">-- true = pass</span>
+
+<span class="kn">def</span><span class="w"> </span><span class="n">runTests</span><span class="w"> </span><span class="o">(</span><span class="n">cases</span><span class="w"> </span><span class="o">:</span><span class="w"> </span><span class="n">List</span><span class="w"> </span><span class="n">TestCase</span><span class="o">)</span><span class="w"> </span><span class="o">:</span><span class="w"> </span><span class="n">List</span><span class="w"> </span><span class="n">String</span><span class="w"> </span><span class="o">:=</span>
+<span class="w">  </span><span class="n">cases</span><span class="bp">.</span><span class="n">filterMap</span><span class="w"> </span><span class="k">fun</span><span class="w"> </span><span class="n">t</span><span class="w"> </span><span class="bp">=&gt;</span>
+<span class="w">    </span><span class="k">if</span><span class="w"> </span><span class="n">t</span><span class="bp">.</span><span class="n">result</span><span class="w"> </span><span class="k">then</span><span class="w"> </span><span class="n">none</span><span class="w"> </span><span class="k">else</span><span class="w"> </span><span class="n">some</span><span class="w"> </span><span class="n">s!</span><span class="s2">"FAIL: {t.name}"</span>
+
+<span class="kn">def</span><span class="w"> </span><span class="n">myTests</span><span class="w"> </span><span class="o">:</span><span class="w"> </span><span class="n">List</span><span class="w"> </span><span class="n">TestCase</span><span class="w"> </span><span class="o">:=</span><span class="w"> </span><span class="o">[</span>
+<span class="w">  </span><span class="o">{</span><span class="w"> </span><span class="n">name</span><span class="w"> </span><span class="o">:=</span><span class="w"> </span><span class="s2">"positive"</span><span class="o">,</span><span class="w"> </span><span class="n">result</span><span class="w"> </span><span class="o">:=</span><span class="w"> </span><span class="o">(</span><span class="n">sign</span><span class="w"> </span><span class="mi">19</span><span class="w"> </span><span class="bp">==</span><span class="w"> </span><span class="mi">1</span><span class="o">)</span><span class="w">   </span><span class="o">},</span>
+<span class="w">  </span><span class="o">{</span><span class="w"> </span><span class="n">name</span><span class="w"> </span><span class="o">:=</span><span class="w"> </span><span class="s2">"negative"</span><span class="o">,</span><span class="w"> </span><span class="n">result</span><span class="w"> </span><span class="o">:=</span><span class="w"> </span><span class="o">(</span><span class="n">sign</span><span class="w"> </span><span class="o">(</span><span class="bp">-</span><span class="mi">3</span><span class="o">)</span><span class="w"> </span><span class="bp">==</span><span class="w"> </span><span class="bp">-</span><span class="mi">1</span><span class="o">)</span><span class="w"> </span><span class="o">},</span>
+<span class="w">  </span><span class="o">{</span><span class="w"> </span><span class="n">name</span><span class="w"> </span><span class="o">:=</span><span class="w"> </span><span class="s2">"zero"</span><span class="o">,</span><span class="w">     </span><span class="n">result</span><span class="w"> </span><span class="o">:=</span><span class="w"> </span><span class="o">(</span><span class="n">sign</span><span class="w"> </span><span class="mi">0</span><span class="w"> </span><span class="bp">==</span><span class="w"> </span><span class="mi">0</span><span class="o">)</span><span class="w">     </span><span class="o">}</span>
+<span class="o">]</span>
+
+<span class="bp">#</span><span class="n">eval</span><span class="w"> </span><span class="n">runTests</span><span class="w"> </span><span class="n">myTests</span><span class="w">   </span><span class="c1">-- []  (all pass)</span>
+
+<span class="bp">#</span><span class="n">guard</span><span class="w"> </span><span class="n">runTests</span><span class="w"> </span><span class="n">myTests</span><span class="w"> </span><span class="bp">==</span><span class="w"> </span><span class="o">[]</span>
+</code></pre></div>
+</div>
+</main>
+<footer aria-label="Page navigation">
+<div class="row">
+<div class="col-3 left">
+<span aria-hidden="true">⇐</span> <a href="../parse/">Parsing Text</a>
+</div>
+<div class="col-6 center">
+<a href="../">sdxl</a>
+	  ©
+	  <a href="../#acknowledgments">the authors</a>
+</div>
+<div class="col-3 right">
+<a href="../interp/">An Interpreter</a> <span aria-hidden="true">⇒</span>
+</div>
+</div>
+</footer>
+</body>
+</html>

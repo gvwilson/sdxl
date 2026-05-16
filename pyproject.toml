@@ -1,0 +1,49 @@
+[project]
+name = "sdxl"
+version = "0.1.0"
+description = "software design by example in lean "
+readme = "README.md"
+requires-python = ">=3.13"
+
+dependencies = [
+    "mccole>=4.4.0",
+    "taskipy>=1.14.1",
+]
+
+[tool.taskipy.tasks]
+bib = {
+    help = "Check bibliography entries",
+    cmd = "mccole bib"
+}
+clean = {
+    help = "Clean up generated and cache files",
+    cmd = "find . -type f -name '*~' -exec rm {} \\;"
+}
+check = {
+    help = "Check code and project",
+    cmd = """
+        mccole check --src . --dst docs
+        typos *.md */*.md
+    """
+}
+serve = {
+    help = "Serve generated HTML",
+    cmd = "python -m http.server -d docs"
+}
+site = {
+    help = "Build HTML",
+    cmd = """
+        mccole build --src . --dst docs
+        touch docs/.nojekyll
+    """
+}
+
+[tool.mccole]
+brand = "sdxl"
+repo = "https://github.com/gvwilson/webllm"
+skips = [
+    "**/*~",
+    "docs/**",
+    "log/**",
+    "uv.lock"
+]

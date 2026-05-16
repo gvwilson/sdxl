@@ -1,0 +1,161 @@
+<!DOCTYPE html>
+
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>An HTML Validator</title>
+<meta content="Software Design by Example in Lean" name="description"/>
+<link href="../_static/favicon.ico" rel="icon" type="image/x-icon"/>
+<link href="../_static/pygments.css" rel="stylesheet" type="text/css"/>
+<link href="../_static/chota.css" rel="stylesheet" type="text/css"/>
+<link href="../_static/mccole.css" rel="stylesheet" type="text/css"/>
+</head>
+<body>
+<a class="skip-link" href="#main-content">Skip to main content</a>
+<nav aria-label="Site navigation" class="nav">
+<div class="nav-left">
+<a class="brand" href="../">sdxl</a>
+<div class="dropdown">
+<button aria-controls="nav-lessons" aria-haspopup="true">Lessons</button>
+<ul class="dropdown-content" id="nav-lessons">
+<li><a href="../intro/">Introduction</a></li>
+<li><a href="../oop/">Objects and Classes</a></li>
+<li><a href="../dup/">Finding Duplicate Files</a></li>
+<li><a href="../glob/">Matching Patterns</a></li>
+<li><a href="../parse/">Parsing Text</a></li>
+<li><a href="../test/">Running Tests</a></li>
+<li><a href="../interp/">An Interpreter</a></li>
+<li><a href="../func/">Functions and Closures</a></li>
+<li><a href="../archive/">A File Archiver</a></li>
+<li><a class="active" href="../check/">An HTML Validator</a></li>
+<li><a href="../template/">A Template Expander</a></li>
+<li><a href="../lint/">A Code Linter</a></li>
+<li><a href="../layout/">Page Layout</a></li>
+<li><a href="../binary/">Binary Data</a></li>
+<li><a href="../db/">A Database</a></li>
+<li><a href="../build/">A Build Manager</a></li>
+<li><a href="../pack/">A Package Manager</a></li>
+<li><a href="../vm/">A Virtual Machine</a></li>
+<li><a href="../docgen/">Generating Documentation</a></li>
+<li><a href="../finale/">Conclusion</a></li>
+</ul>
+</div>
+<div class="dropdown">
+<button aria-controls="nav-appendices" aria-haspopup="true">Appendices</button>
+<ul class="dropdown-content" id="nav-appendices">
+<li><a href="../license/">License</a></li>
+<li><a href="../conduct/">Code of Conduct</a></li>
+<li><a href="../contributing/">Contributing</a></li>
+<li><a href="../bibliography/">Bibliography</a></li>
+<li><a href="../glossary/">Glossary</a></li>
+</ul>
+</div>
+<a href="https://github.com/gvwilson/webllm">Repository</a>
+</div>
+</nav>
+<main id="main-content">
+<h1>An HTML Validator</h1>
+<h2>Outline</h2>
+<ul>
+<li>Represent HTML as a <code>Node</code> inductive: <code>Text</code>, <code>Element</code> (tag + attrs + children)</li>
+<li>Visitor pattern: <code>Visitor α</code> is a record of callbacks invoked as <code>walk</code> enters and
+  leaves each node; <code>walk</code> handles the recursion</li>
+<li>Validator 1: check that <code>&lt;img&gt;</code> elements have an <code>alt</code> attribute</li>
+<li>Validator 2: check that <code>&lt;a&gt;</code> elements have an <code>href</code> attribute</li>
+<li>Both validators are built with the same <code>walk</code> infrastructure; adding a new check
+  is just a new function, not a change to <code>walk</code></li>
+</ul>
+<h2>Code</h2>
+<div data-inc="code.lean"><span aria-label="Source: check/code.lean" class="inc-path" role="img" tabindex="0" title="check/code.lean">i</span><div class="codehilite"><pre class="" tabindex="0"><span></span><code><span class="c1">-- HTML node tree</span>
+<span class="kn">abbrev</span><span class="w"> </span><span class="n">Attrs</span><span class="w"> </span><span class="o">:=</span><span class="w"> </span><span class="n">List</span><span class="w"> </span><span class="o">(</span><span class="n">String</span><span class="w"> </span><span class="bp">×</span><span class="w"> </span><span class="n">String</span><span class="o">)</span>
+
+<span class="kn">inductive</span><span class="w"> </span><span class="n">Node</span><span class="w"> </span><span class="kn">where</span>
+<span class="w">  </span><span class="bp">|</span><span class="w"> </span><span class="n">Text</span><span class="w">    </span><span class="o">:</span><span class="w"> </span><span class="n">String</span><span class="w"> </span><span class="bp">→</span><span class="w"> </span><span class="n">Node</span>
+<span class="w">  </span><span class="bp">|</span><span class="w"> </span><span class="n">Element</span><span class="w"> </span><span class="o">:</span><span class="w"> </span><span class="n">String</span><span class="w"> </span><span class="bp">→</span><span class="w"> </span><span class="n">Attrs</span><span class="w"> </span><span class="bp">→</span><span class="w"> </span><span class="n">List</span><span class="w"> </span><span class="n">Node</span><span class="w"> </span><span class="bp">→</span><span class="w"> </span><span class="n">Node</span>
+<span class="w">  </span><span class="n">deriving</span><span class="w"> </span><span class="n">Repr</span>
+
+<span class="c1">-- Visitor record: callbacks invoked on enter and leave</span>
+<span class="kn">structure</span><span class="w"> </span><span class="n">Visitor</span><span class="w"> </span><span class="o">(</span><span class="n">α</span><span class="w"> </span><span class="o">:</span><span class="w"> </span><span class="kt">Type</span><span class="o">)</span><span class="w"> </span><span class="kn">where</span>
+<span class="w">  </span><span class="n">onEnter</span><span class="w"> </span><span class="o">:</span><span class="w"> </span><span class="n">String</span><span class="w"> </span><span class="bp">→</span><span class="w"> </span><span class="n">Attrs</span><span class="w"> </span><span class="bp">→</span><span class="w"> </span><span class="n">α</span><span class="w"> </span><span class="bp">→</span><span class="w"> </span><span class="n">α</span>
+<span class="w">  </span><span class="n">onLeave</span><span class="w"> </span><span class="o">:</span><span class="w"> </span><span class="n">String</span><span class="w"> </span><span class="bp">→</span><span class="w"> </span><span class="n">α</span><span class="w"> </span><span class="bp">→</span><span class="w"> </span><span class="n">α</span>
+<span class="w">  </span><span class="n">onText</span><span class="w">  </span><span class="o">:</span><span class="w"> </span><span class="n">String</span><span class="w"> </span><span class="bp">→</span><span class="w"> </span><span class="n">α</span><span class="w"> </span><span class="bp">→</span><span class="w"> </span><span class="n">α</span>
+
+<span class="c1">-- Walk the tree, threading accumulator through callbacks</span>
+<span class="kn">def</span><span class="w"> </span><span class="n">walk</span><span class="w"> </span><span class="o">{</span><span class="n">α</span><span class="o">}</span><span class="w"> </span><span class="o">(</span><span class="n">v</span><span class="w"> </span><span class="o">:</span><span class="w"> </span><span class="n">Visitor</span><span class="w"> </span><span class="n">α</span><span class="o">)</span><span class="w"> </span><span class="o">(</span><span class="n">acc</span><span class="w"> </span><span class="o">:</span><span class="w"> </span><span class="n">α</span><span class="o">)</span><span class="w"> </span><span class="o">:</span><span class="w"> </span><span class="n">Node</span><span class="w"> </span><span class="bp">→</span><span class="w"> </span><span class="n">α</span>
+<span class="w">  </span><span class="bp">|</span><span class="w"> </span><span class="n">Node</span><span class="bp">.</span><span class="n">Text</span><span class="w"> </span><span class="n">t</span><span class="w">        </span><span class="bp">=&gt;</span><span class="w"> </span><span class="n">v</span><span class="bp">.</span><span class="n">onText</span><span class="w"> </span><span class="n">t</span><span class="w"> </span><span class="n">acc</span>
+<span class="w">  </span><span class="bp">|</span><span class="w"> </span><span class="n">Node</span><span class="bp">.</span><span class="n">Element</span><span class="w"> </span><span class="n">tag</span><span class="w"> </span><span class="n">attrs</span><span class="w"> </span><span class="n">children</span><span class="w"> </span><span class="bp">=&gt;</span>
+<span class="w">      </span><span class="k">let</span><span class="w"> </span><span class="n">acc'</span><span class="w"> </span><span class="o">:=</span><span class="w"> </span><span class="n">v</span><span class="bp">.</span><span class="n">onEnter</span><span class="w"> </span><span class="n">tag</span><span class="w"> </span><span class="n">attrs</span><span class="w"> </span><span class="n">acc</span>
+<span class="w">      </span><span class="k">let</span><span class="w"> </span><span class="n">acc''</span><span class="w"> </span><span class="o">:=</span><span class="w"> </span><span class="n">children</span><span class="bp">.</span><span class="n">foldl</span><span class="w"> </span><span class="o">(</span><span class="n">walk</span><span class="w"> </span><span class="n">v</span><span class="o">)</span><span class="w"> </span><span class="n">acc'</span>
+<span class="w">      </span><span class="n">v</span><span class="bp">.</span><span class="n">onLeave</span><span class="w"> </span><span class="n">tag</span><span class="w"> </span><span class="n">acc''</span>
+
+<span class="c1">-- Helper: find attribute value</span>
+<span class="kn">def</span><span class="w"> </span><span class="n">getAttr</span><span class="w"> </span><span class="o">(</span><span class="n">attrs</span><span class="w"> </span><span class="o">:</span><span class="w"> </span><span class="n">Attrs</span><span class="o">)</span><span class="w"> </span><span class="o">(</span><span class="n">name</span><span class="w"> </span><span class="o">:</span><span class="w"> </span><span class="n">String</span><span class="o">)</span><span class="w"> </span><span class="o">:</span><span class="w"> </span><span class="n">Option</span><span class="w"> </span><span class="n">String</span><span class="w"> </span><span class="o">:=</span>
+<span class="w">  </span><span class="o">(</span><span class="n">attrs</span><span class="bp">.</span><span class="n">find?</span><span class="w"> </span><span class="o">(</span><span class="bp">·.</span><span class="m">1</span><span class="w"> </span><span class="bp">==</span><span class="w"> </span><span class="n">name</span><span class="o">))</span><span class="bp">.</span><span class="n">map</span><span class="w"> </span><span class="o">(</span><span class="bp">·.</span><span class="m">2</span><span class="o">)</span>
+
+<span class="c1">-- Validator: collect error messages</span>
+<span class="kn">abbrev</span><span class="w"> </span><span class="n">Errors</span><span class="w"> </span><span class="o">:=</span><span class="w"> </span><span class="n">List</span><span class="w"> </span><span class="n">String</span>
+
+<span class="kn">def</span><span class="w"> </span><span class="n">noopVisitor</span><span class="w"> </span><span class="o">:</span><span class="w"> </span><span class="n">Visitor</span><span class="w"> </span><span class="n">Errors</span><span class="w"> </span><span class="o">:=</span>
+<span class="w">  </span><span class="o">{</span><span class="w"> </span><span class="n">onEnter</span><span class="w"> </span><span class="o">:=</span><span class="w"> </span><span class="k">fun</span><span class="w"> </span><span class="bp">_</span><span class="w"> </span><span class="bp">_</span><span class="w"> </span><span class="n">e</span><span class="w"> </span><span class="bp">=&gt;</span><span class="w"> </span><span class="n">e</span><span class="o">,</span><span class="w"> </span><span class="n">onLeave</span><span class="w"> </span><span class="o">:=</span><span class="w"> </span><span class="k">fun</span><span class="w"> </span><span class="bp">_</span><span class="w"> </span><span class="n">e</span><span class="w"> </span><span class="bp">=&gt;</span><span class="w"> </span><span class="n">e</span><span class="o">,</span><span class="w"> </span><span class="n">onText</span><span class="w"> </span><span class="o">:=</span><span class="w"> </span><span class="k">fun</span><span class="w"> </span><span class="bp">_</span><span class="w"> </span><span class="n">e</span><span class="w"> </span><span class="bp">=&gt;</span><span class="w"> </span><span class="n">e</span><span class="w"> </span><span class="o">}</span>
+
+<span class="c1">-- Check &lt;img&gt; elements have alt attribute</span>
+<span class="kn">def</span><span class="w"> </span><span class="n">imgAltVisitor</span><span class="w"> </span><span class="o">:</span><span class="w"> </span><span class="n">Visitor</span><span class="w"> </span><span class="n">Errors</span><span class="w"> </span><span class="o">:=</span>
+<span class="w">  </span><span class="o">{</span><span class="w"> </span><span class="n">noopVisitor</span><span class="w"> </span><span class="k">with</span>
+<span class="w">    </span><span class="n">onEnter</span><span class="w"> </span><span class="o">:=</span><span class="w"> </span><span class="k">fun</span><span class="w"> </span><span class="n">tag</span><span class="w"> </span><span class="n">attrs</span><span class="w"> </span><span class="n">errs</span><span class="w"> </span><span class="bp">=&gt;</span>
+<span class="w">      </span><span class="k">if</span><span class="w"> </span><span class="n">tag</span><span class="w"> </span><span class="bp">==</span><span class="w"> </span><span class="s2">"img"</span><span class="w"> </span><span class="bp">&amp;&amp;</span><span class="w"> </span><span class="n">getAttr</span><span class="w"> </span><span class="n">attrs</span><span class="w"> </span><span class="s2">"alt"</span><span class="w"> </span><span class="bp">==</span><span class="w"> </span><span class="n">none</span>
+<span class="w">      </span><span class="k">then</span><span class="w"> </span><span class="n">errs</span><span class="w"> </span><span class="bp">++</span><span class="w"> </span><span class="o">[</span><span class="s2">"img missing alt"</span><span class="o">]</span>
+<span class="w">      </span><span class="k">else</span><span class="w"> </span><span class="n">errs</span><span class="w"> </span><span class="o">}</span>
+
+<span class="c1">-- Check &lt;a&gt; elements have href attribute</span>
+<span class="kn">def</span><span class="w"> </span><span class="n">linkHrefVisitor</span><span class="w"> </span><span class="o">:</span><span class="w"> </span><span class="n">Visitor</span><span class="w"> </span><span class="n">Errors</span><span class="w"> </span><span class="o">:=</span>
+<span class="w">  </span><span class="o">{</span><span class="w"> </span><span class="n">noopVisitor</span><span class="w"> </span><span class="k">with</span>
+<span class="w">    </span><span class="n">onEnter</span><span class="w"> </span><span class="o">:=</span><span class="w"> </span><span class="k">fun</span><span class="w"> </span><span class="n">tag</span><span class="w"> </span><span class="n">attrs</span><span class="w"> </span><span class="n">errs</span><span class="w"> </span><span class="bp">=&gt;</span>
+<span class="w">      </span><span class="k">if</span><span class="w"> </span><span class="n">tag</span><span class="w"> </span><span class="bp">==</span><span class="w"> </span><span class="s2">"a"</span><span class="w"> </span><span class="bp">&amp;&amp;</span><span class="w"> </span><span class="n">getAttr</span><span class="w"> </span><span class="n">attrs</span><span class="w"> </span><span class="s2">"href"</span><span class="w"> </span><span class="bp">==</span><span class="w"> </span><span class="n">none</span>
+<span class="w">      </span><span class="k">then</span><span class="w"> </span><span class="n">errs</span><span class="w"> </span><span class="bp">++</span><span class="w"> </span><span class="o">[</span><span class="s2">"a missing href"</span><span class="o">]</span>
+<span class="w">      </span><span class="k">else</span><span class="w"> </span><span class="n">errs</span><span class="w"> </span><span class="o">}</span>
+
+<span class="c1">-- Compose validators by running both over the tree</span>
+<span class="kn">def</span><span class="w"> </span><span class="n">validate</span><span class="w"> </span><span class="o">(</span><span class="n">doc</span><span class="w"> </span><span class="o">:</span><span class="w"> </span><span class="n">Node</span><span class="o">)</span><span class="w"> </span><span class="o">:</span><span class="w"> </span><span class="n">Errors</span><span class="w"> </span><span class="o">:=</span>
+<span class="w">  </span><span class="n">walk</span><span class="w"> </span><span class="n">imgAltVisitor</span><span class="w"> </span><span class="o">[]</span><span class="w"> </span><span class="n">doc</span><span class="w"> </span><span class="bp">++</span><span class="w"> </span><span class="n">walk</span><span class="w"> </span><span class="n">linkHrefVisitor</span><span class="w"> </span><span class="o">[]</span><span class="w"> </span><span class="n">doc</span>
+
+<span class="c1">-- Tests ----------------------------------------------------------------</span>
+
+<span class="kn">def</span><span class="w"> </span><span class="n">goodDoc</span><span class="w"> </span><span class="o">:</span><span class="w"> </span><span class="n">Node</span><span class="w"> </span><span class="o">:=</span>
+<span class="w">  </span><span class="n">Node</span><span class="bp">.</span><span class="n">Element</span><span class="w"> </span><span class="s2">"html"</span><span class="w"> </span><span class="o">[]</span><span class="w"> </span><span class="o">[</span>
+<span class="w">    </span><span class="n">Node</span><span class="bp">.</span><span class="n">Element</span><span class="w"> </span><span class="s2">"body"</span><span class="w"> </span><span class="o">[]</span><span class="w"> </span><span class="o">[</span>
+<span class="w">      </span><span class="n">Node</span><span class="bp">.</span><span class="n">Element</span><span class="w"> </span><span class="s2">"img"</span><span class="w"> </span><span class="o">[(</span><span class="s2">"src"</span><span class="o">,</span><span class="w"> </span><span class="s2">"pic.jpg"</span><span class="o">),</span><span class="w"> </span><span class="o">(</span><span class="s2">"alt"</span><span class="o">,</span><span class="w"> </span><span class="s2">"a picture"</span><span class="o">)]</span><span class="w"> </span><span class="o">[],</span>
+<span class="w">      </span><span class="n">Node</span><span class="bp">.</span><span class="n">Element</span><span class="w"> </span><span class="s2">"a"</span><span class="w">   </span><span class="o">[(</span><span class="s2">"href"</span><span class="o">,</span><span class="w"> </span><span class="s2">"https://example.com"</span><span class="o">)]</span><span class="w"> </span><span class="o">[</span><span class="n">Node</span><span class="bp">.</span><span class="n">Text</span><span class="w"> </span><span class="s2">"click"</span><span class="o">]</span>
+<span class="w">    </span><span class="o">]</span>
+<span class="w">  </span><span class="o">]</span>
+
+<span class="kn">def</span><span class="w"> </span><span class="n">badDoc</span><span class="w"> </span><span class="o">:</span><span class="w"> </span><span class="n">Node</span><span class="w"> </span><span class="o">:=</span>
+<span class="w">  </span><span class="n">Node</span><span class="bp">.</span><span class="n">Element</span><span class="w"> </span><span class="s2">"html"</span><span class="w"> </span><span class="o">[]</span><span class="w"> </span><span class="o">[</span>
+<span class="w">    </span><span class="n">Node</span><span class="bp">.</span><span class="n">Element</span><span class="w"> </span><span class="s2">"body"</span><span class="w"> </span><span class="o">[]</span><span class="w"> </span><span class="o">[</span>
+<span class="w">      </span><span class="n">Node</span><span class="bp">.</span><span class="n">Element</span><span class="w"> </span><span class="s2">"img"</span><span class="w"> </span><span class="o">[(</span><span class="s2">"src"</span><span class="o">,</span><span class="w"> </span><span class="s2">"pic.jpg"</span><span class="o">)]</span><span class="w"> </span><span class="o">[],</span><span class="w">          </span><span class="c1">-- missing alt</span>
+<span class="w">      </span><span class="n">Node</span><span class="bp">.</span><span class="n">Element</span><span class="w"> </span><span class="s2">"a"</span><span class="w">   </span><span class="o">[]</span><span class="w"> </span><span class="o">[</span><span class="n">Node</span><span class="bp">.</span><span class="n">Text</span><span class="w"> </span><span class="s2">"click"</span><span class="o">]</span><span class="w">             </span><span class="c1">-- missing href</span>
+<span class="w">    </span><span class="o">]</span>
+<span class="w">  </span><span class="o">]</span>
+
+<span class="bp">#</span><span class="n">guard</span><span class="w"> </span><span class="n">validate</span><span class="w"> </span><span class="n">goodDoc</span><span class="w"> </span><span class="bp">==</span><span class="w"> </span><span class="o">[]</span>
+<span class="bp">#</span><span class="n">guard</span><span class="w"> </span><span class="n">validate</span><span class="w"> </span><span class="n">badDoc</span><span class="w"> </span><span class="bp">==</span><span class="w"> </span><span class="o">[</span><span class="s2">"img missing alt"</span><span class="o">,</span><span class="w"> </span><span class="s2">"a missing href"</span><span class="o">]</span>
+</code></pre></div>
+</div>
+</main>
+<footer aria-label="Page navigation">
+<div class="row">
+<div class="col-3 left">
+<span aria-hidden="true">⇐</span> <a href="../archive/">A File Archiver</a>
+</div>
+<div class="col-6 center">
+<a href="../">sdxl</a>
+	  ©
+	  <a href="../#acknowledgments">the authors</a>
+</div>
+<div class="col-3 right">
+<a href="../template/">A Template Expander</a> <span aria-hidden="true">⇒</span>
+</div>
+</div>
+</footer>
+</body>
+</html>

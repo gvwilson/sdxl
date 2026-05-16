@@ -1,0 +1,175 @@
+<!DOCTYPE html>
+
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Generating Documentation</title>
+<meta content="Software Design by Example in Lean" name="description"/>
+<link href="../_static/favicon.ico" rel="icon" type="image/x-icon"/>
+<link href="../_static/pygments.css" rel="stylesheet" type="text/css"/>
+<link href="../_static/chota.css" rel="stylesheet" type="text/css"/>
+<link href="../_static/mccole.css" rel="stylesheet" type="text/css"/>
+</head>
+<body>
+<a class="skip-link" href="#main-content">Skip to main content</a>
+<nav aria-label="Site navigation" class="nav">
+<div class="nav-left">
+<a class="brand" href="../">sdxl</a>
+<div class="dropdown">
+<button aria-controls="nav-lessons" aria-haspopup="true">Lessons</button>
+<ul class="dropdown-content" id="nav-lessons">
+<li><a href="../intro/">Introduction</a></li>
+<li><a href="../oop/">Objects and Classes</a></li>
+<li><a href="../dup/">Finding Duplicate Files</a></li>
+<li><a href="../glob/">Matching Patterns</a></li>
+<li><a href="../parse/">Parsing Text</a></li>
+<li><a href="../test/">Running Tests</a></li>
+<li><a href="../interp/">An Interpreter</a></li>
+<li><a href="../func/">Functions and Closures</a></li>
+<li><a href="../archive/">A File Archiver</a></li>
+<li><a href="../check/">An HTML Validator</a></li>
+<li><a href="../template/">A Template Expander</a></li>
+<li><a href="../lint/">A Code Linter</a></li>
+<li><a href="../layout/">Page Layout</a></li>
+<li><a href="../binary/">Binary Data</a></li>
+<li><a href="../db/">A Database</a></li>
+<li><a href="../build/">A Build Manager</a></li>
+<li><a href="../pack/">A Package Manager</a></li>
+<li><a href="../vm/">A Virtual Machine</a></li>
+<li><a class="active" href="../docgen/">Generating Documentation</a></li>
+<li><a href="../finale/">Conclusion</a></li>
+</ul>
+</div>
+<div class="dropdown">
+<button aria-controls="nav-appendices" aria-haspopup="true">Appendices</button>
+<ul class="dropdown-content" id="nav-appendices">
+<li><a href="../license/">License</a></li>
+<li><a href="../conduct/">Code of Conduct</a></li>
+<li><a href="../contributing/">Contributing</a></li>
+<li><a href="../bibliography/">Bibliography</a></li>
+<li><a href="../glossary/">Glossary</a></li>
+</ul>
+</div>
+<a href="https://github.com/gvwilson/webllm">Repository</a>
+</div>
+</nav>
+<main id="main-content">
+<h1>Generating Documentation</h1>
+<h2>Outline</h2>
+<ul>
+<li>Represent a source file as a list of <code>Decl</code> values: <code>DFunc</code>, <code>DStruct</code>, <code>DModule</code></li>
+<li>Each <code>Decl</code> carries an optional doc comment string</li>
+<li><code>extract</code> walks the declaration list and collects <code>DocEntry</code> records (kind, name,
+  doc string)</li>
+<li><code>renderMarkdown</code> turns the entries into a Markdown string with headings per kind</li>
+<li>The IO layer reads a <code>.lean</code> file, strips <code>--</code> doc comments attached to <code>def</code>/
+  <code>structure</code> declarations, builds the <code>Decl</code> list, then writes the rendered output</li>
+</ul>
+<h2>Code</h2>
+<div data-inc="code.lean"><span aria-label="Source: docgen/code.lean" class="inc-path" role="img" tabindex="0" title="docgen/code.lean">i</span><div class="codehilite"><pre class="" tabindex="0"><span></span><code><span class="c1">-- Kinds of documented declarations</span>
+<span class="kn">inductive</span><span class="w"> </span><span class="n">DeclKind</span><span class="w"> </span><span class="kn">where</span>
+<span class="w">  </span><span class="bp">|</span><span class="w"> </span><span class="n">Module</span><span class="w"> </span><span class="bp">|</span><span class="w"> </span><span class="n">Func</span><span class="w"> </span><span class="bp">|</span><span class="w"> </span><span class="n">Struct</span><span class="w"> </span><span class="bp">|</span><span class="w"> </span><span class="n">TypeClass</span>
+<span class="w">  </span><span class="n">deriving</span><span class="w"> </span><span class="n">Repr</span><span class="o">,</span><span class="w"> </span><span class="n">BEq</span>
+
+<span class="c1">-- A source declaration with optional doc comment</span>
+<span class="kn">structure</span><span class="w"> </span><span class="n">Decl</span><span class="w"> </span><span class="kn">where</span>
+<span class="w">  </span><span class="n">kind</span><span class="w">    </span><span class="o">:</span><span class="w"> </span><span class="n">DeclKind</span>
+<span class="w">  </span><span class="n">name</span><span class="w">    </span><span class="o">:</span><span class="w"> </span><span class="n">String</span>
+<span class="w">  </span><span class="n">docStr</span><span class="w">  </span><span class="o">:</span><span class="w"> </span><span class="n">Option</span><span class="w"> </span><span class="n">String</span>
+<span class="w">  </span><span class="n">deriving</span><span class="w"> </span><span class="n">Repr</span>
+
+<span class="c1">-- A doc entry produced by extraction</span>
+<span class="kn">structure</span><span class="w"> </span><span class="n">DocEntry</span><span class="w"> </span><span class="kn">where</span>
+<span class="w">  </span><span class="n">kind</span><span class="w">   </span><span class="o">:</span><span class="w"> </span><span class="n">DeclKind</span>
+<span class="w">  </span><span class="n">name</span><span class="w">   </span><span class="o">:</span><span class="w"> </span><span class="n">String</span>
+<span class="w">  </span><span class="n">doc</span><span class="w">    </span><span class="o">:</span><span class="w"> </span><span class="n">String</span><span class="w">       </span><span class="c1">-- empty string if no comment</span>
+<span class="w">  </span><span class="n">deriving</span><span class="w"> </span><span class="n">Repr</span>
+
+<span class="c1">-- Extract documented declarations (skip undocumented ones)</span>
+<span class="kn">def</span><span class="w"> </span><span class="n">extract</span><span class="w"> </span><span class="o">(</span><span class="n">decls</span><span class="w"> </span><span class="o">:</span><span class="w"> </span><span class="n">List</span><span class="w"> </span><span class="n">Decl</span><span class="o">)</span><span class="w"> </span><span class="o">:</span><span class="w"> </span><span class="n">List</span><span class="w"> </span><span class="n">DocEntry</span><span class="w"> </span><span class="o">:=</span>
+<span class="w">  </span><span class="n">decls</span><span class="bp">.</span><span class="n">filterMap</span><span class="w"> </span><span class="k">fun</span><span class="w"> </span><span class="n">d</span><span class="w"> </span><span class="bp">=&gt;</span>
+<span class="w">    </span><span class="n">d</span><span class="bp">.</span><span class="n">docStr</span><span class="bp">.</span><span class="n">map</span><span class="w"> </span><span class="k">fun</span><span class="w"> </span><span class="n">doc</span><span class="w"> </span><span class="bp">=&gt;</span><span class="w"> </span><span class="o">{</span><span class="w"> </span><span class="n">kind</span><span class="w"> </span><span class="o">:=</span><span class="w"> </span><span class="n">d</span><span class="bp">.</span><span class="n">kind</span><span class="o">,</span><span class="w"> </span><span class="n">name</span><span class="w"> </span><span class="o">:=</span><span class="w"> </span><span class="n">d</span><span class="bp">.</span><span class="n">name</span><span class="o">,</span><span class="w"> </span><span class="n">doc</span><span class="w"> </span><span class="o">}</span>
+
+<span class="c1">-- Render to Markdown</span>
+<span class="kn">def</span><span class="w"> </span><span class="n">kindHeading</span><span class="w"> </span><span class="o">:</span><span class="w"> </span><span class="n">DeclKind</span><span class="w"> </span><span class="bp">→</span><span class="w"> </span><span class="n">String</span>
+<span class="w">  </span><span class="bp">|</span><span class="w"> </span><span class="bp">.</span><span class="n">Module</span><span class="w">    </span><span class="bp">=&gt;</span><span class="w"> </span><span class="s2">"#"</span>
+<span class="w">  </span><span class="bp">|</span><span class="w"> </span><span class="bp">.</span><span class="n">TypeClass</span><span class="w"> </span><span class="bp">=&gt;</span><span class="w"> </span><span class="s2">"##"</span>
+<span class="w">  </span><span class="bp">|</span><span class="w"> </span><span class="bp">.</span><span class="n">Struct</span><span class="w">    </span><span class="bp">=&gt;</span><span class="w"> </span><span class="s2">"##"</span>
+<span class="w">  </span><span class="bp">|</span><span class="w"> </span><span class="bp">.</span><span class="n">Func</span><span class="w">      </span><span class="bp">=&gt;</span><span class="w"> </span><span class="s2">"###"</span>
+
+<span class="kn">def</span><span class="w"> </span><span class="n">renderMarkdown</span><span class="w"> </span><span class="o">(</span><span class="n">entries</span><span class="w"> </span><span class="o">:</span><span class="w"> </span><span class="n">List</span><span class="w"> </span><span class="n">DocEntry</span><span class="o">)</span><span class="w"> </span><span class="o">:</span><span class="w"> </span><span class="n">String</span><span class="w"> </span><span class="o">:=</span>
+<span class="w">  </span><span class="n">entries</span><span class="bp">.</span><span class="n">foldl</span><span class="w"> </span><span class="o">(</span><span class="n">init</span><span class="w"> </span><span class="o">:=</span><span class="w"> </span><span class="s2">""</span><span class="o">)</span><span class="w"> </span><span class="k">fun</span><span class="w"> </span><span class="n">acc</span><span class="w"> </span><span class="n">e</span><span class="w"> </span><span class="bp">=&gt;</span>
+<span class="w">    </span><span class="n">acc</span><span class="w"> </span><span class="bp">++</span><span class="w"> </span><span class="n">s!</span><span class="s2">"{kindHeading e.kind} {e.name}</span><span class="se">\n\n</span><span class="s2">{e.doc}</span><span class="se">\n\n</span><span class="s2">"</span>
+
+<span class="c1">-- Simple line-by-line doc comment extractor for .lean source</span>
+<span class="c1">-- Collects consecutive `-- ` lines before a `def`/`structure` declaration</span>
+<span class="kn">def</span><span class="w"> </span><span class="n">parseDecls</span><span class="w"> </span><span class="o">(</span><span class="n">src</span><span class="w"> </span><span class="o">:</span><span class="w"> </span><span class="n">String</span><span class="o">)</span><span class="w"> </span><span class="o">:</span><span class="w"> </span><span class="n">List</span><span class="w"> </span><span class="n">Decl</span><span class="w"> </span><span class="o">:=</span><span class="w"> </span><span class="n">Id</span><span class="bp">.</span><span class="n">run</span><span class="w"> </span><span class="k">do</span>
+<span class="w">  </span><span class="k">let</span><span class="w"> </span><span class="n">lines</span><span class="w"> </span><span class="o">:=</span><span class="w"> </span><span class="n">src</span><span class="bp">.</span><span class="n">splitOn</span><span class="w"> </span><span class="s2">"</span><span class="se">\n</span><span class="s2">"</span>
+<span class="w">  </span><span class="k">let</span><span class="w"> </span><span class="n">mut</span><span class="w"> </span><span class="n">decls</span><span class="w"> </span><span class="o">:</span><span class="w"> </span><span class="n">List</span><span class="w"> </span><span class="n">Decl</span><span class="w"> </span><span class="o">:=</span><span class="w"> </span><span class="o">[]</span>
+<span class="w">  </span><span class="k">let</span><span class="w"> </span><span class="n">mut</span><span class="w"> </span><span class="n">pendingDoc</span><span class="w"> </span><span class="o">:</span><span class="w"> </span><span class="n">Option</span><span class="w"> </span><span class="n">String</span><span class="w"> </span><span class="o">:=</span><span class="w"> </span><span class="n">none</span>
+<span class="w">  </span><span class="n">for</span><span class="w"> </span><span class="n">line</span><span class="w"> </span><span class="k">in</span><span class="w"> </span><span class="n">lines</span><span class="w"> </span><span class="k">do</span>
+<span class="w">    </span><span class="k">let</span><span class="w"> </span><span class="n">stripped</span><span class="w"> </span><span class="o">:=</span><span class="w"> </span><span class="n">line</span><span class="bp">.</span><span class="n">trimLeft</span>
+<span class="w">    </span><span class="k">if</span><span class="w"> </span><span class="n">stripped</span><span class="bp">.</span><span class="n">startsWith</span><span class="w"> </span><span class="s2">"-- "</span><span class="w"> </span><span class="k">then</span>
+<span class="w">      </span><span class="k">let</span><span class="w"> </span><span class="n">comment</span><span class="w"> </span><span class="o">:=</span><span class="w"> </span><span class="n">stripped</span><span class="bp">.</span><span class="n">drop</span><span class="w"> </span><span class="mi">3</span>
+<span class="w">      </span><span class="n">pendingDoc</span><span class="w"> </span><span class="o">:=</span><span class="w"> </span><span class="n">some</span><span class="w"> </span><span class="o">((</span><span class="n">pendingDoc</span><span class="bp">.</span><span class="n">getD</span><span class="w"> </span><span class="s2">""</span><span class="o">)</span><span class="w"> </span><span class="bp">++</span><span class="w"> </span><span class="n">comment</span><span class="w"> </span><span class="bp">++</span><span class="w"> </span><span class="s2">" "</span><span class="o">)</span>
+<span class="w">    </span><span class="k">else</span><span class="w"> </span><span class="k">if</span><span class="w"> </span><span class="n">stripped</span><span class="bp">.</span><span class="n">startsWith</span><span class="w"> </span><span class="s2">"def "</span><span class="w"> </span><span class="k">then</span>
+<span class="w">      </span><span class="k">let</span><span class="w"> </span><span class="n">name</span><span class="w"> </span><span class="o">:=</span><span class="w"> </span><span class="o">(</span><span class="n">stripped</span><span class="bp">.</span><span class="n">drop</span><span class="w"> </span><span class="mi">4</span><span class="o">)</span><span class="bp">.</span><span class="n">takeWhile</span><span class="w"> </span><span class="o">(</span><span class="bp">·</span><span class="w"> </span><span class="bp">!=</span><span class="w"> </span><span class="bp">'</span><span class="w"> </span><span class="bp">'</span><span class="o">)</span><span class="w"> </span><span class="bp">|&gt;.</span><span class="n">takeWhile</span><span class="w"> </span><span class="o">(</span><span class="bp">·</span><span class="w"> </span><span class="bp">!=</span><span class="w"> </span><span class="bp">'</span><span class="o">(</span><span class="bp">'</span><span class="o">)</span>
+<span class="w">      </span><span class="n">decls</span><span class="w"> </span><span class="o">:=</span><span class="w"> </span><span class="n">decls</span><span class="w"> </span><span class="bp">++</span><span class="w"> </span><span class="o">[{</span><span class="w"> </span><span class="n">kind</span><span class="w"> </span><span class="o">:=</span><span class="w"> </span><span class="bp">.</span><span class="n">Func</span><span class="o">,</span><span class="w"> </span><span class="n">name</span><span class="o">,</span><span class="w"> </span><span class="n">docStr</span><span class="w"> </span><span class="o">:=</span><span class="w"> </span><span class="n">pendingDoc</span><span class="w"> </span><span class="o">}]</span>
+<span class="w">      </span><span class="n">pendingDoc</span><span class="w"> </span><span class="o">:=</span><span class="w"> </span><span class="n">none</span>
+<span class="w">    </span><span class="k">else</span><span class="w"> </span><span class="k">if</span><span class="w"> </span><span class="n">stripped</span><span class="bp">.</span><span class="n">startsWith</span><span class="w"> </span><span class="s2">"structure "</span><span class="w"> </span><span class="k">then</span>
+<span class="w">      </span><span class="k">let</span><span class="w"> </span><span class="n">name</span><span class="w"> </span><span class="o">:=</span><span class="w"> </span><span class="o">(</span><span class="n">stripped</span><span class="bp">.</span><span class="n">drop</span><span class="w"> </span><span class="mi">10</span><span class="o">)</span><span class="bp">.</span><span class="n">takeWhile</span><span class="w"> </span><span class="o">(</span><span class="bp">·</span><span class="w"> </span><span class="bp">!=</span><span class="w"> </span><span class="bp">'</span><span class="w"> </span><span class="bp">'</span><span class="o">)</span><span class="w"> </span><span class="bp">|&gt;.</span><span class="n">takeWhile</span><span class="w"> </span><span class="o">(</span><span class="bp">·</span><span class="w"> </span><span class="bp">!=</span><span class="w"> </span><span class="bp">'</span><span class="n">w'</span><span class="o">)</span>
+<span class="w">      </span><span class="n">decls</span><span class="w"> </span><span class="o">:=</span><span class="w"> </span><span class="n">decls</span><span class="w"> </span><span class="bp">++</span><span class="w"> </span><span class="o">[{</span><span class="w"> </span><span class="n">kind</span><span class="w"> </span><span class="o">:=</span><span class="w"> </span><span class="bp">.</span><span class="n">Struct</span><span class="o">,</span><span class="w"> </span><span class="n">name</span><span class="o">,</span><span class="w"> </span><span class="n">docStr</span><span class="w"> </span><span class="o">:=</span><span class="w"> </span><span class="n">pendingDoc</span><span class="w"> </span><span class="o">}]</span>
+<span class="w">      </span><span class="n">pendingDoc</span><span class="w"> </span><span class="o">:=</span><span class="w"> </span><span class="n">none</span>
+<span class="w">    </span><span class="k">else</span>
+<span class="w">      </span><span class="n">pendingDoc</span><span class="w"> </span><span class="o">:=</span><span class="w"> </span><span class="n">none</span>
+<span class="w">  </span><span class="n">return</span><span class="w"> </span><span class="n">decls</span>
+
+<span class="c1">-- Tests ---------------------------------------------------------------</span>
+
+<span class="kn">def</span><span class="w"> </span><span class="n">sampleSrc</span><span class="w"> </span><span class="o">:</span><span class="w"> </span><span class="n">String</span><span class="w"> </span><span class="o">:=</span>
+<span class="s2">"-- Adds two numbers together.</span>
+<span class="s2">def add (x y : Int) : Int := x + y</span>
+
+<span class="s2">def hidden := 42</span>
+
+<span class="s2">-- Holds a name and age.</span>
+<span class="s2">structure Person where</span>
+<span class="s2">  name : String</span>
+<span class="s2">  age  : Nat"</span>
+
+<span class="bp">#</span><span class="n">eval</span><span class="w"> </span><span class="n">parseDecls</span><span class="w"> </span><span class="n">sampleSrc</span>
+<span class="c1">-- [{ kind: Func,   name: "add",    docStr: some "Adds two numbers together. " },</span>
+<span class="c1">--  { kind: Func,   name: "hidden", docStr: none },</span>
+<span class="c1">--  { kind: Struct, name: "Person", docStr: some "Holds a name and age. " }]</span>
+
+<span class="bp">#</span><span class="n">eval</span><span class="w"> </span><span class="n">renderMarkdown</span><span class="w"> </span><span class="o">(</span><span class="n">extract</span><span class="w"> </span><span class="o">(</span><span class="n">parseDecls</span><span class="w"> </span><span class="n">sampleSrc</span><span class="o">))</span>
+<span class="c1">-- ### add</span>
+<span class="c1">--</span>
+<span class="c1">-- Adds two numbers together.</span>
+<span class="c1">--</span>
+<span class="c1">-- ## Person</span>
+<span class="c1">--</span>
+<span class="c1">-- Holds a name and age.</span>
+
+<span class="bp">#</span><span class="n">guard</span><span class="w"> </span><span class="n">extract</span><span class="w"> </span><span class="o">(</span><span class="n">parseDecls</span><span class="w"> </span><span class="n">sampleSrc</span><span class="o">)</span><span class="w"> </span><span class="bp">|&gt;.</span><span class="n">length</span><span class="w"> </span><span class="bp">==</span><span class="w"> </span><span class="mi">2</span><span class="w">   </span><span class="c1">-- only documented ones</span>
+</code></pre></div>
+</div>
+</main>
+<footer aria-label="Page navigation">
+<div class="row">
+<div class="col-3 left">
+<span aria-hidden="true">⇐</span> <a href="../vm/">A Virtual Machine</a>
+</div>
+<div class="col-6 center">
+<a href="../">sdxl</a>
+	  ©
+	  <a href="../#acknowledgments">the authors</a>
+</div>
+<div class="col-3 right">
+<a href="../finale/">Conclusion</a> <span aria-hidden="true">⇒</span>
+</div>
+</div>
+</footer>
+</body>
+</html>

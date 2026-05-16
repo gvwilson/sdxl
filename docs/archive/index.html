@@ -1,0 +1,153 @@
+<!DOCTYPE html>
+
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>A File Archiver</title>
+<meta content="Software Design by Example in Lean" name="description"/>
+<link href="../_static/favicon.ico" rel="icon" type="image/x-icon"/>
+<link href="../_static/pygments.css" rel="stylesheet" type="text/css"/>
+<link href="../_static/chota.css" rel="stylesheet" type="text/css"/>
+<link href="../_static/mccole.css" rel="stylesheet" type="text/css"/>
+</head>
+<body>
+<a class="skip-link" href="#main-content">Skip to main content</a>
+<nav aria-label="Site navigation" class="nav">
+<div class="nav-left">
+<a class="brand" href="../">sdxl</a>
+<div class="dropdown">
+<button aria-controls="nav-lessons" aria-haspopup="true">Lessons</button>
+<ul class="dropdown-content" id="nav-lessons">
+<li><a href="../intro/">Introduction</a></li>
+<li><a href="../oop/">Objects and Classes</a></li>
+<li><a href="../dup/">Finding Duplicate Files</a></li>
+<li><a href="../glob/">Matching Patterns</a></li>
+<li><a href="../parse/">Parsing Text</a></li>
+<li><a href="../test/">Running Tests</a></li>
+<li><a href="../interp/">An Interpreter</a></li>
+<li><a href="../func/">Functions and Closures</a></li>
+<li><a class="active" href="../archive/">A File Archiver</a></li>
+<li><a href="../check/">An HTML Validator</a></li>
+<li><a href="../template/">A Template Expander</a></li>
+<li><a href="../lint/">A Code Linter</a></li>
+<li><a href="../layout/">Page Layout</a></li>
+<li><a href="../binary/">Binary Data</a></li>
+<li><a href="../db/">A Database</a></li>
+<li><a href="../build/">A Build Manager</a></li>
+<li><a href="../pack/">A Package Manager</a></li>
+<li><a href="../vm/">A Virtual Machine</a></li>
+<li><a href="../docgen/">Generating Documentation</a></li>
+<li><a href="../finale/">Conclusion</a></li>
+</ul>
+</div>
+<div class="dropdown">
+<button aria-controls="nav-appendices" aria-haspopup="true">Appendices</button>
+<ul class="dropdown-content" id="nav-appendices">
+<li><a href="../license/">License</a></li>
+<li><a href="../conduct/">Code of Conduct</a></li>
+<li><a href="../contributing/">Contributing</a></li>
+<li><a href="../bibliography/">Bibliography</a></li>
+<li><a href="../glossary/">Glossary</a></li>
+</ul>
+</div>
+<a href="https://github.com/gvwilson/webllm">Repository</a>
+</div>
+</nav>
+<main id="main-content">
+<h1>A File Archiver</h1>
+<h2>Outline</h2>
+<ul>
+<li>Hash each file's bytes to produce a content address (like Git's object store)</li>
+<li>A <code>Manifest</code> maps original file paths to their content hashes</li>
+<li><code>snapshot</code> reads a directory, hashes every file, writes each unique blob to
+  <code>&lt;hash&gt;.bck</code>, and records the manifest</li>
+<li><code>restore</code> reads a manifest and copies the blobs back to their original names</li>
+<li>Pure core: <code>Manifest</code> operations, hash computation, de-duplication</li>
+<li>IO layer: <code>IO.FS.readBinFile</code>, <code>IO.FS.writeBinFile</code>, <code>IO.FS.readDir</code></li>
+</ul>
+<h2>Code</h2>
+<div data-inc="code.lean"><span aria-label="Source: archive/code.lean" class="inc-path" role="img" tabindex="0" title="archive/code.lean">i</span><div class="codehilite"><pre class="" tabindex="0"><span></span><code><span class="c1">-- Content address = hex string of the hash</span>
+<span class="kn">abbrev</span><span class="w"> </span><span class="n">Hash</span><span class="w"> </span><span class="bp">=</span><span class="w"> </span><span class="n">String</span>
+
+<span class="c1">-- Manifest: original path → content hash</span>
+<span class="kn">abbrev</span><span class="w"> </span><span class="n">Manifest</span><span class="w"> </span><span class="bp">=</span><span class="w"> </span><span class="n">List</span><span class="w"> </span><span class="o">(</span><span class="n">String</span><span class="w"> </span><span class="bp">×</span><span class="w"> </span><span class="n">Hash</span><span class="o">)</span>
+
+<span class="c1">-- Convert a ByteArray hash (UInt64 via Lean's Hashable) to a hex string</span>
+<span class="kn">def</span><span class="w"> </span><span class="n">hashBytes</span><span class="w"> </span><span class="o">(</span><span class="n">ba</span><span class="w"> </span><span class="o">:</span><span class="w"> </span><span class="n">ByteArray</span><span class="o">)</span><span class="w"> </span><span class="o">:</span><span class="w"> </span><span class="n">Hash</span><span class="w"> </span><span class="o">:=</span>
+<span class="w">  </span><span class="k">let</span><span class="w"> </span><span class="n">h</span><span class="w"> </span><span class="o">:</span><span class="w"> </span><span class="n">UInt64</span><span class="w"> </span><span class="o">:=</span><span class="w"> </span><span class="n">hash</span><span class="w"> </span><span class="n">ba</span><span class="w">   </span><span class="c1">-- structural hash; use SHA-256 for real archiving</span>
+<span class="w">  </span><span class="c1">-- format as 16-char hex</span>
+<span class="w">  </span><span class="k">let</span><span class="w"> </span><span class="n">hex</span><span class="w"> </span><span class="o">:=</span><span class="w"> </span><span class="s2">"0123456789abcdef"</span><span class="bp">.</span><span class="n">toList</span>
+<span class="w">  </span><span class="k">let</span><span class="w"> </span><span class="n">digits</span><span class="w"> </span><span class="o">:=</span><span class="w"> </span><span class="o">(</span><span class="n">List</span><span class="bp">.</span><span class="n">range</span><span class="w"> </span><span class="mi">16</span><span class="o">)</span><span class="bp">.</span><span class="n">map</span><span class="w"> </span><span class="k">fun</span><span class="w"> </span><span class="n">i</span><span class="w"> </span><span class="bp">=&gt;</span>
+<span class="w">    </span><span class="k">let</span><span class="w"> </span><span class="n">nibble</span><span class="w"> </span><span class="o">:=</span><span class="w"> </span><span class="o">(</span><span class="n">h</span><span class="w"> </span><span class="bp">&gt;&gt;&gt;</span><span class="w"> </span><span class="o">(</span><span class="mi">60</span><span class="w"> </span><span class="bp">-</span><span class="w"> </span><span class="n">i</span><span class="w"> </span><span class="bp">*</span><span class="w"> </span><span class="mi">4</span><span class="o">)</span><span class="bp">.</span><span class="n">toUInt64</span><span class="o">)</span><span class="w"> </span><span class="bp">&amp;&amp;&amp;</span><span class="w"> </span><span class="mi">0</span><span class="n">xF</span>
+<span class="w">    </span><span class="n">hex</span><span class="o">[</span><span class="n">nibble</span><span class="bp">.</span><span class="n">toNat</span><span class="o">]!</span>
+<span class="w">  </span><span class="n">String</span><span class="bp">.</span><span class="n">mk</span><span class="w"> </span><span class="n">digits</span>
+
+<span class="c1">-- Pure: deduplicate a list of (path, bytes) pairs into (Manifest, blob store)</span>
+<span class="kn">def</span><span class="w"> </span><span class="n">buildManifest</span><span class="w"> </span><span class="o">(</span><span class="n">files</span><span class="w"> </span><span class="o">:</span><span class="w"> </span><span class="n">List</span><span class="w"> </span><span class="o">(</span><span class="n">String</span><span class="w"> </span><span class="bp">×</span><span class="w"> </span><span class="n">ByteArray</span><span class="o">))</span><span class="w"> </span><span class="o">:</span>
+<span class="w">    </span><span class="n">Manifest</span><span class="w"> </span><span class="bp">×</span><span class="w"> </span><span class="n">List</span><span class="w"> </span><span class="o">(</span><span class="n">Hash</span><span class="w"> </span><span class="bp">×</span><span class="w"> </span><span class="n">ByteArray</span><span class="o">)</span><span class="w"> </span><span class="o">:=</span>
+<span class="w">  </span><span class="k">let</span><span class="w"> </span><span class="n">entries</span><span class="w"> </span><span class="o">:=</span><span class="w"> </span><span class="n">files</span><span class="bp">.</span><span class="n">map</span><span class="w"> </span><span class="k">fun</span><span class="w"> </span><span class="o">(</span><span class="n">path</span><span class="o">,</span><span class="w"> </span><span class="n">bytes</span><span class="o">)</span><span class="w"> </span><span class="bp">=&gt;</span><span class="w"> </span><span class="o">(</span><span class="n">path</span><span class="o">,</span><span class="w"> </span><span class="n">hashBytes</span><span class="w"> </span><span class="n">bytes</span><span class="o">,</span><span class="w"> </span><span class="n">bytes</span><span class="o">)</span>
+<span class="w">  </span><span class="k">let</span><span class="w"> </span><span class="n">manifest</span><span class="w"> </span><span class="o">:=</span><span class="w"> </span><span class="n">entries</span><span class="bp">.</span><span class="n">map</span><span class="w"> </span><span class="k">fun</span><span class="w"> </span><span class="o">(</span><span class="n">path</span><span class="o">,</span><span class="w"> </span><span class="n">h</span><span class="o">,</span><span class="w"> </span><span class="bp">_</span><span class="o">)</span><span class="w"> </span><span class="bp">=&gt;</span><span class="w"> </span><span class="o">(</span><span class="n">path</span><span class="o">,</span><span class="w"> </span><span class="n">h</span><span class="o">)</span>
+<span class="w">  </span><span class="k">let</span><span class="w"> </span><span class="n">blobs</span><span class="w"> </span><span class="o">:=</span><span class="w"> </span><span class="n">entries</span><span class="bp">.</span><span class="n">foldl</span><span class="w"> </span><span class="o">(</span><span class="n">init</span><span class="w"> </span><span class="o">:=</span><span class="w"> </span><span class="o">[])</span><span class="w"> </span><span class="k">fun</span><span class="w"> </span><span class="n">acc</span><span class="w"> </span><span class="o">(</span><span class="bp">_</span><span class="o">,</span><span class="w"> </span><span class="n">h</span><span class="o">,</span><span class="w"> </span><span class="n">bytes</span><span class="o">)</span><span class="w"> </span><span class="bp">=&gt;</span>
+<span class="w">    </span><span class="k">if</span><span class="w"> </span><span class="n">acc</span><span class="bp">.</span><span class="n">any</span><span class="w"> </span><span class="o">(</span><span class="bp">·.</span><span class="m">1</span><span class="w"> </span><span class="bp">==</span><span class="w"> </span><span class="n">h</span><span class="o">)</span><span class="w"> </span><span class="k">then</span><span class="w"> </span><span class="n">acc</span><span class="w"> </span><span class="k">else</span><span class="w"> </span><span class="n">acc</span><span class="w"> </span><span class="bp">++</span><span class="w"> </span><span class="o">[(</span><span class="n">h</span><span class="o">,</span><span class="w"> </span><span class="n">bytes</span><span class="o">)]</span>
+<span class="w">  </span><span class="o">(</span><span class="n">manifest</span><span class="o">,</span><span class="w"> </span><span class="n">blobs</span><span class="o">)</span>
+
+<span class="c1">-- IO: snapshot a list of files into an archive directory</span>
+<span class="kn">def</span><span class="w"> </span><span class="n">snapshot</span><span class="w"> </span><span class="o">(</span><span class="n">files</span><span class="w"> </span><span class="o">:</span><span class="w"> </span><span class="n">List</span><span class="w"> </span><span class="o">(</span><span class="n">String</span><span class="w"> </span><span class="bp">×</span><span class="w"> </span><span class="n">ByteArray</span><span class="o">))</span><span class="w"> </span><span class="o">(</span><span class="n">archiveDir</span><span class="w"> </span><span class="o">:</span><span class="w"> </span><span class="n">String</span><span class="o">)</span><span class="w"> </span><span class="o">:</span>
+<span class="w">    </span><span class="n">IO</span><span class="w"> </span><span class="n">Manifest</span><span class="w"> </span><span class="o">:=</span><span class="w"> </span><span class="k">do</span>
+<span class="w">  </span><span class="k">let</span><span class="w"> </span><span class="o">(</span><span class="n">manifest</span><span class="o">,</span><span class="w"> </span><span class="n">blobs</span><span class="o">)</span><span class="w"> </span><span class="o">:=</span><span class="w"> </span><span class="n">buildManifest</span><span class="w"> </span><span class="n">files</span>
+<span class="w">  </span><span class="n">for</span><span class="w"> </span><span class="o">(</span><span class="n">h</span><span class="o">,</span><span class="w"> </span><span class="n">bytes</span><span class="o">)</span><span class="w"> </span><span class="k">in</span><span class="w"> </span><span class="n">blobs</span><span class="w"> </span><span class="k">do</span>
+<span class="w">    </span><span class="n">IO</span><span class="bp">.</span><span class="n">FS</span><span class="bp">.</span><span class="n">writeBinFile</span><span class="w"> </span><span class="n">s!</span><span class="s2">"{archiveDir}/{h}.bck"</span><span class="w"> </span><span class="n">bytes</span>
+<span class="w">  </span><span class="n">return</span><span class="w"> </span><span class="n">manifest</span>
+
+<span class="c1">-- IO: restore files from a manifest + archive directory</span>
+<span class="kn">def</span><span class="w"> </span><span class="n">restore</span><span class="w"> </span><span class="o">(</span><span class="n">manifest</span><span class="w"> </span><span class="o">:</span><span class="w"> </span><span class="n">Manifest</span><span class="o">)</span><span class="w"> </span><span class="o">(</span><span class="n">archiveDir</span><span class="w"> </span><span class="o">:</span><span class="w"> </span><span class="n">String</span><span class="o">)</span><span class="w"> </span><span class="o">:</span><span class="w"> </span><span class="n">IO</span><span class="w"> </span><span class="n">Unit</span><span class="w"> </span><span class="o">:=</span><span class="w"> </span><span class="k">do</span>
+<span class="w">  </span><span class="n">for</span><span class="w"> </span><span class="o">(</span><span class="n">path</span><span class="o">,</span><span class="w"> </span><span class="n">h</span><span class="o">)</span><span class="w"> </span><span class="k">in</span><span class="w"> </span><span class="n">manifest</span><span class="w"> </span><span class="k">do</span>
+<span class="w">    </span><span class="k">let</span><span class="w"> </span><span class="n">bytes</span><span class="w"> </span><span class="bp">←</span><span class="w"> </span><span class="n">IO</span><span class="bp">.</span><span class="n">FS</span><span class="bp">.</span><span class="n">readBinFile</span><span class="w"> </span><span class="n">s!</span><span class="s2">"{archiveDir}/{h}.bck"</span>
+<span class="w">    </span><span class="n">IO</span><span class="bp">.</span><span class="n">FS</span><span class="bp">.</span><span class="n">writeBinFile</span><span class="w"> </span><span class="n">path</span><span class="w"> </span><span class="n">bytes</span>
+
+<span class="c1">-- IO: snapshot all files under a directory</span>
+<span class="kn">def</span><span class="w"> </span><span class="n">snapshotDir</span><span class="w"> </span><span class="o">(</span><span class="n">srcDir</span><span class="w"> </span><span class="n">archiveDir</span><span class="w"> </span><span class="o">:</span><span class="w"> </span><span class="n">String</span><span class="o">)</span><span class="w"> </span><span class="o">:</span><span class="w"> </span><span class="n">IO</span><span class="w"> </span><span class="n">Manifest</span><span class="w"> </span><span class="o">:=</span><span class="w"> </span><span class="k">do</span>
+<span class="w">  </span><span class="k">let</span><span class="w"> </span><span class="n">entries</span><span class="w"> </span><span class="bp">←</span><span class="w"> </span><span class="n">IO</span><span class="bp">.</span><span class="n">FS</span><span class="bp">.</span><span class="n">readDir</span><span class="w"> </span><span class="n">srcDir</span>
+<span class="w">  </span><span class="k">let</span><span class="w"> </span><span class="n">files</span><span class="w"> </span><span class="bp">←</span><span class="w"> </span><span class="n">entries</span><span class="bp">.</span><span class="n">toList</span><span class="bp">.</span><span class="n">filterMapM</span><span class="w"> </span><span class="k">fun</span><span class="w"> </span><span class="n">e</span><span class="w"> </span><span class="bp">=&gt;</span><span class="w"> </span><span class="k">do</span>
+<span class="w">    </span><span class="k">if</span><span class="w"> </span><span class="o">(</span><span class="bp">←</span><span class="w"> </span><span class="n">e</span><span class="bp">.</span><span class="n">path</span><span class="bp">.</span><span class="n">isDir</span><span class="o">)</span><span class="w"> </span><span class="k">then</span><span class="w"> </span><span class="n">return</span><span class="w"> </span><span class="n">none</span>
+<span class="w">    </span><span class="k">let</span><span class="w"> </span><span class="n">bytes</span><span class="w"> </span><span class="bp">←</span><span class="w"> </span><span class="n">IO</span><span class="bp">.</span><span class="n">FS</span><span class="bp">.</span><span class="n">readBinFile</span><span class="w"> </span><span class="n">e</span><span class="bp">.</span><span class="n">path</span><span class="bp">.</span><span class="n">toString</span>
+<span class="w">    </span><span class="n">return</span><span class="w"> </span><span class="n">some</span><span class="w"> </span><span class="o">(</span><span class="n">e</span><span class="bp">.</span><span class="n">path</span><span class="bp">.</span><span class="n">toString</span><span class="o">,</span><span class="w"> </span><span class="n">bytes</span><span class="o">)</span>
+<span class="w">  </span><span class="n">snapshot</span><span class="w"> </span><span class="n">files</span><span class="w"> </span><span class="n">archiveDir</span>
+
+<span class="c1">-- Tests (pure core) ---------------------------------------------------</span>
+
+<span class="kn">def</span><span class="w"> </span><span class="n">sampleFiles</span><span class="w"> </span><span class="o">:</span><span class="w"> </span><span class="n">List</span><span class="w"> </span><span class="o">(</span><span class="n">String</span><span class="w"> </span><span class="bp">×</span><span class="w"> </span><span class="n">ByteArray</span><span class="o">)</span><span class="w"> </span><span class="o">:=</span><span class="w"> </span><span class="o">[</span>
+<span class="w">  </span><span class="o">(</span><span class="s2">"a.txt"</span><span class="o">,</span><span class="w"> </span><span class="s2">"hello"</span><span class="bp">.</span><span class="n">toUTF8</span><span class="o">),</span>
+<span class="w">  </span><span class="o">(</span><span class="s2">"b.txt"</span><span class="o">,</span><span class="w"> </span><span class="s2">"hello"</span><span class="bp">.</span><span class="n">toUTF8</span><span class="o">),</span><span class="w">   </span><span class="c1">-- same content as a.txt</span>
+<span class="w">  </span><span class="o">(</span><span class="s2">"c.txt"</span><span class="o">,</span><span class="w"> </span><span class="s2">"world"</span><span class="bp">.</span><span class="n">toUTF8</span><span class="o">)</span>
+<span class="o">]</span>
+
+<span class="c1">-- Two files with identical content should produce only two blobs</span>
+<span class="bp">#</span><span class="n">guard</span><span class="w"> </span><span class="o">(</span><span class="n">buildManifest</span><span class="w"> </span><span class="n">sampleFiles</span><span class="o">)</span><span class="bp">.</span><span class="m">2</span><span class="bp">.</span><span class="n">length</span><span class="w"> </span><span class="bp">==</span><span class="w"> </span><span class="mi">2</span>
+
+<span class="c1">-- Both a.txt and b.txt map to the same hash</span>
+<span class="bp">#</span><span class="n">guard</span>
+<span class="w">  </span><span class="k">let</span><span class="w"> </span><span class="o">(</span><span class="n">manifest</span><span class="o">,</span><span class="w"> </span><span class="bp">_</span><span class="o">)</span><span class="w"> </span><span class="o">:=</span><span class="w"> </span><span class="n">buildManifest</span><span class="w"> </span><span class="n">sampleFiles</span>
+<span class="w">  </span><span class="o">(</span><span class="n">manifest</span><span class="bp">.</span><span class="n">find?</span><span class="w"> </span><span class="o">(</span><span class="bp">·.</span><span class="m">1</span><span class="w"> </span><span class="bp">==</span><span class="w"> </span><span class="s2">"a.txt"</span><span class="o">))</span><span class="bp">.</span><span class="n">map</span><span class="w"> </span><span class="o">(</span><span class="bp">·.</span><span class="m">2</span><span class="o">)</span><span class="w"> </span><span class="bp">==</span>
+<span class="w">  </span><span class="o">(</span><span class="n">manifest</span><span class="bp">.</span><span class="n">find?</span><span class="w"> </span><span class="o">(</span><span class="bp">·.</span><span class="m">1</span><span class="w"> </span><span class="bp">==</span><span class="w"> </span><span class="s2">"b.txt"</span><span class="o">))</span><span class="bp">.</span><span class="n">map</span><span class="w"> </span><span class="o">(</span><span class="bp">·.</span><span class="m">2</span><span class="o">)</span>
+</code></pre></div>
+</div>
+</main>
+<footer aria-label="Page navigation">
+<div class="row">
+<div class="col-3 left">
+<span aria-hidden="true">⇐</span> <a href="../func/">Functions and Closures</a>
+</div>
+<div class="col-6 center">
+<a href="../">sdxl</a>
+	  ©
+	  <a href="../#acknowledgments">the authors</a>
+</div>
+<div class="col-3 right">
+<a href="../check/">An HTML Validator</a> <span aria-hidden="true">⇒</span>
+</div>
+</div>
+</footer>
+</body>
+</html>

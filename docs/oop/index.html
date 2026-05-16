@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Objects and Classes</title>
+<meta content="Software Design by Example in Lean" name="description"/>
+<link href="../_static/favicon.ico" rel="icon" type="image/x-icon"/>
+<link href="../_static/pygments.css" rel="stylesheet" type="text/css"/>
+<link href="../_static/chota.css" rel="stylesheet" type="text/css"/>
+<link href="../_static/mccole.css" rel="stylesheet" type="text/css"/>
+</head>
+<body>
+<a class="skip-link" href="#main-content">Skip to main content</a>
+<nav aria-label="Site navigation" class="nav">
+<div class="nav-left">
+<a class="brand" href="../">sdxl</a>
+<div class="dropdown">
+<button aria-controls="nav-lessons" aria-haspopup="true">Lessons</button>
+<ul class="dropdown-content" id="nav-lessons">
+<li><a href="../intro/">Introduction</a></li>
+<li><a class="active" href="../oop/">Objects and Classes</a></li>
+<li><a href="../dup/">Finding Duplicate Files</a></li>
+<li><a href="../glob/">Matching Patterns</a></li>
+<li><a href="../parse/">Parsing Text</a></li>
+<li><a href="../test/">Running Tests</a></li>
+<li><a href="../interp/">An Interpreter</a></li>
+<li><a href="../func/">Functions and Closures</a></li>
+<li><a href="../archive/">A File Archiver</a></li>
+<li><a href="../check/">An HTML Validator</a></li>
+<li><a href="../template/">A Template Expander</a></li>
+<li><a href="../lint/">A Code Linter</a></li>
+<li><a href="../layout/">Page Layout</a></li>
+<li><a href="../binary/">Binary Data</a></li>
+<li><a href="../db/">A Database</a></li>
+<li><a href="../build/">A Build Manager</a></li>
+<li><a href="../pack/">A Package Manager</a></li>
+<li><a href="../vm/">A Virtual Machine</a></li>
+<li><a href="../docgen/">Generating Documentation</a></li>
+<li><a href="../finale/">Conclusion</a></li>
+</ul>
+</div>
+<div class="dropdown">
+<button aria-controls="nav-appendices" aria-haspopup="true">Appendices</button>
+<ul class="dropdown-content" id="nav-appendices">
+<li><a href="../license/">License</a></li>
+<li><a href="../conduct/">Code of Conduct</a></li>
+<li><a href="../contributing/">Contributing</a></li>
+<li><a href="../bibliography/">Bibliography</a></li>
+<li><a href="../glossary/">Glossary</a></li>
+</ul>
+</div>
+<a href="https://github.com/gvwilson/webllm">Repository</a>
+</div>
+</nav>
+<main id="main-content">
+<h1>Objects and Classes</h1>
+<h2>Outline</h2>
+<ul>
+<li>Define a <code>Shape</code> typeclass specifying <code>area</code> and <code>perimeter</code> for any type</li>
+<li>Implement <code>Circle</code> and <code>Square</code> as plain structures</li>
+<li>Provide typeclass instances for each; no shared base class needed</li>
+<li>Write a polymorphic <code>describe</code> function constrained by <code>[Shape α]</code></li>
+<li>Demonstrate that any type satisfying the contract is usable interchangeably</li>
+</ul>
+<h2>Code</h2>
+<div data-inc="code.lean"><span aria-label="Source: oop/code.lean" class="inc-path" role="img" tabindex="0" title="oop/code.lean">i</span><div class="codehilite"><pre class="" tabindex="0"><span></span><code><span class="c1">-- A contract: any type that can report its area and perimeter</span>
+<span class="kn">class</span><span class="w"> </span><span class="n">Shape</span><span class="w"> </span><span class="o">(</span><span class="n">α</span><span class="w"> </span><span class="o">:</span><span class="w"> </span><span class="kt">Type</span><span class="o">)</span><span class="w"> </span><span class="kn">where</span>
+<span class="w">  </span><span class="n">area</span><span class="w">      </span><span class="o">:</span><span class="w"> </span><span class="n">α</span><span class="w"> </span><span class="bp">→</span><span class="w"> </span><span class="n">Float</span>
+<span class="w">  </span><span class="n">perimeter</span><span class="w"> </span><span class="o">:</span><span class="w"> </span><span class="n">α</span><span class="w"> </span><span class="bp">→</span><span class="w"> </span><span class="n">Float</span>
+
+<span class="kn">structure</span><span class="w"> </span><span class="n">Circle</span><span class="w"> </span><span class="kn">where</span>
+<span class="w">  </span><span class="n">radius</span><span class="w"> </span><span class="o">:</span><span class="w"> </span><span class="n">Float</span>
+<span class="w">  </span><span class="n">deriving</span><span class="w"> </span><span class="n">Repr</span>
+
+<span class="kn">structure</span><span class="w"> </span><span class="n">Square</span><span class="w"> </span><span class="kn">where</span>
+<span class="w">  </span><span class="n">side</span><span class="w"> </span><span class="o">:</span><span class="w"> </span><span class="n">Float</span>
+<span class="w">  </span><span class="n">deriving</span><span class="w"> </span><span class="n">Repr</span>
+
+<span class="kn">def</span><span class="w"> </span><span class="n">pi</span><span class="w"> </span><span class="o">:</span><span class="w"> </span><span class="n">Float</span><span class="w"> </span><span class="o">:=</span><span class="w"> </span><span class="mf">3.14159265358979</span>
+
+<span class="kn">instance</span><span class="w"> </span><span class="o">:</span><span class="w"> </span><span class="n">Shape</span><span class="w"> </span><span class="n">Circle</span><span class="w"> </span><span class="kn">where</span>
+<span class="w">  </span><span class="n">area</span><span class="w"> </span><span class="n">c</span><span class="w">      </span><span class="o">:=</span><span class="w"> </span><span class="n">pi</span><span class="w"> </span><span class="bp">*</span><span class="w"> </span><span class="n">c</span><span class="bp">.</span><span class="n">radius</span><span class="w"> </span><span class="bp">*</span><span class="w"> </span><span class="n">c</span><span class="bp">.</span><span class="n">radius</span>
+<span class="w">  </span><span class="n">perimeter</span><span class="w"> </span><span class="n">c</span><span class="w"> </span><span class="o">:=</span><span class="w"> </span><span class="mf">2.0</span><span class="w"> </span><span class="bp">*</span><span class="w"> </span><span class="n">pi</span><span class="w"> </span><span class="bp">*</span><span class="w"> </span><span class="n">c</span><span class="bp">.</span><span class="n">radius</span>
+
+<span class="kn">instance</span><span class="w"> </span><span class="o">:</span><span class="w"> </span><span class="n">Shape</span><span class="w"> </span><span class="n">Square</span><span class="w"> </span><span class="kn">where</span>
+<span class="w">  </span><span class="n">area</span><span class="w"> </span><span class="n">s</span><span class="w">      </span><span class="o">:=</span><span class="w"> </span><span class="n">s</span><span class="bp">.</span><span class="n">side</span><span class="w"> </span><span class="bp">*</span><span class="w"> </span><span class="n">s</span><span class="bp">.</span><span class="n">side</span>
+<span class="w">  </span><span class="n">perimeter</span><span class="w"> </span><span class="n">s</span><span class="w"> </span><span class="o">:=</span><span class="w"> </span><span class="mf">4.0</span><span class="w"> </span><span class="bp">*</span><span class="w"> </span><span class="n">s</span><span class="bp">.</span><span class="n">side</span>
+
+<span class="c1">-- Polymorphic: works for any type with a Shape instance</span>
+<span class="kn">def</span><span class="w"> </span><span class="n">describe</span><span class="w"> </span><span class="o">{</span><span class="n">α</span><span class="w"> </span><span class="o">:</span><span class="w"> </span><span class="kt">Type</span><span class="o">}</span><span class="w"> </span><span class="o">[</span><span class="n">Shape</span><span class="w"> </span><span class="n">α</span><span class="o">]</span><span class="w"> </span><span class="o">[</span><span class="n">Repr</span><span class="w"> </span><span class="n">α</span><span class="o">]</span><span class="w"> </span><span class="o">(</span><span class="n">x</span><span class="w"> </span><span class="o">:</span><span class="w"> </span><span class="n">α</span><span class="o">)</span><span class="w"> </span><span class="o">:</span><span class="w"> </span><span class="n">String</span><span class="w"> </span><span class="o">:=</span>
+<span class="w">  </span><span class="n">s!</span><span class="s2">"area={Shape.area x} perimeter={Shape.perimeter x}"</span>
+
+<span class="c1">-- Existential wrapper so we can put mixed shapes in one list</span>
+<span class="kn">structure</span><span class="w"> </span><span class="n">AnyShape</span><span class="w"> </span><span class="kn">where</span>
+<span class="w">  </span><span class="n">area</span><span class="w">      </span><span class="o">:</span><span class="w"> </span><span class="n">Float</span>
+<span class="w">  </span><span class="n">perimeter</span><span class="w"> </span><span class="o">:</span><span class="w"> </span><span class="n">Float</span>
+
+<span class="kn">def</span><span class="w"> </span><span class="n">wrap</span><span class="w"> </span><span class="o">{</span><span class="n">α</span><span class="w"> </span><span class="o">:</span><span class="w"> </span><span class="kt">Type</span><span class="o">}</span><span class="w"> </span><span class="o">[</span><span class="n">Shape</span><span class="w"> </span><span class="n">α</span><span class="o">]</span><span class="w"> </span><span class="o">(</span><span class="n">x</span><span class="w"> </span><span class="o">:</span><span class="w"> </span><span class="n">α</span><span class="o">)</span><span class="w"> </span><span class="o">:</span><span class="w"> </span><span class="n">AnyShape</span><span class="w"> </span><span class="o">:=</span>
+<span class="w">  </span><span class="o">{</span><span class="w"> </span><span class="n">area</span><span class="w"> </span><span class="o">:=</span><span class="w"> </span><span class="n">Shape</span><span class="bp">.</span><span class="n">area</span><span class="w"> </span><span class="n">x</span><span class="o">,</span><span class="w"> </span><span class="n">perimeter</span><span class="w"> </span><span class="o">:=</span><span class="w"> </span><span class="n">Shape</span><span class="bp">.</span><span class="n">perimeter</span><span class="w"> </span><span class="n">x</span><span class="w"> </span><span class="o">}</span>
+
+<span class="kn">def</span><span class="w"> </span><span class="n">totalArea</span><span class="w"> </span><span class="o">(</span><span class="n">shapes</span><span class="w"> </span><span class="o">:</span><span class="w"> </span><span class="n">List</span><span class="w"> </span><span class="n">AnyShape</span><span class="o">)</span><span class="w"> </span><span class="o">:</span><span class="w"> </span><span class="n">Float</span><span class="w"> </span><span class="o">:=</span>
+<span class="w">  </span><span class="n">shapes</span><span class="bp">.</span><span class="n">foldl</span><span class="w"> </span><span class="o">(</span><span class="n">init</span><span class="w"> </span><span class="o">:=</span><span class="w"> </span><span class="mf">0.0</span><span class="o">)</span><span class="w"> </span><span class="o">(</span><span class="bp">·</span><span class="w"> </span><span class="bp">+</span><span class="w"> </span><span class="bp">·.</span><span class="n">area</span><span class="o">)</span>
+
+<span class="bp">#</span><span class="n">eval</span><span class="w"> </span><span class="n">describe</span><span class="w"> </span><span class="o">(</span><span class="n">Circle</span><span class="bp">.</span><span class="n">mk</span><span class="w"> </span><span class="mf">1.0</span><span class="o">)</span>
+<span class="bp">#</span><span class="n">eval</span><span class="w"> </span><span class="n">describe</span><span class="w"> </span><span class="o">(</span><span class="n">Square</span><span class="bp">.</span><span class="n">mk</span><span class="w"> </span><span class="mf">3.0</span><span class="o">)</span>
+
+<span class="bp">#</span><span class="n">eval</span><span class="w"> </span><span class="n">totalArea</span><span class="w"> </span><span class="o">[</span><span class="n">wrap</span><span class="w"> </span><span class="o">(</span><span class="n">Circle</span><span class="bp">.</span><span class="n">mk</span><span class="w"> </span><span class="mf">1.0</span><span class="o">),</span><span class="w"> </span><span class="n">wrap</span><span class="w"> </span><span class="o">(</span><span class="n">Square</span><span class="bp">.</span><span class="n">mk</span><span class="w"> </span><span class="mf">2.0</span><span class="o">)]</span>
+
+<span class="bp">#</span><span class="n">guard</span><span class="w"> </span><span class="n">Shape</span><span class="bp">.</span><span class="n">area</span><span class="w"> </span><span class="o">(</span><span class="n">Square</span><span class="bp">.</span><span class="n">mk</span><span class="w"> </span><span class="mf">3.0</span><span class="o">)</span><span class="w"> </span><span class="bp">==</span><span class="w"> </span><span class="mf">9.0</span>
+<span class="bp">#</span><span class="n">guard</span><span class="w"> </span><span class="n">Shape</span><span class="bp">.</span><span class="n">perimeter</span><span class="w"> </span><span class="o">(</span><span class="n">Square</span><span class="bp">.</span><span class="n">mk</span><span class="w"> </span><span class="mf">3.0</span><span class="o">)</span><span class="w"> </span><span class="bp">==</span><span class="w"> </span><span class="mf">12.0</span>
+</code></pre></div>
+</div>
+</main>
+<footer aria-label="Page navigation">
+<div class="row">
+<div class="col-3 left">
+<span aria-hidden="true">⇐</span> <a href="../intro/">Introduction</a>
+</div>
+<div class="col-6 center">
+<a href="../">sdxl</a>
+	  ©
+	  <a href="../#acknowledgments">the authors</a>
+</div>
+<div class="col-3 right">
+<a href="../dup/">Finding Duplicate Files</a> <span aria-hidden="true">⇒</span>
+</div>
+</div>
+</footer>
+</body>
+</html>

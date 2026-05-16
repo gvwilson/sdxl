@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Binary Data</title>
+<meta content="Software Design by Example in Lean" name="description"/>
+<link href="../_static/favicon.ico" rel="icon" type="image/x-icon"/>
+<link href="../_static/pygments.css" rel="stylesheet" type="text/css"/>
+<link href="../_static/chota.css" rel="stylesheet" type="text/css"/>
+<link href="../_static/mccole.css" rel="stylesheet" type="text/css"/>
+</head>
+<body>
+<a class="skip-link" href="#main-content">Skip to main content</a>
+<nav aria-label="Site navigation" class="nav">
+<div class="nav-left">
+<a class="brand" href="../">sdxl</a>
+<div class="dropdown">
+<button aria-controls="nav-lessons" aria-haspopup="true">Lessons</button>
+<ul class="dropdown-content" id="nav-lessons">
+<li><a href="../intro/">Introduction</a></li>
+<li><a href="../oop/">Objects and Classes</a></li>
+<li><a href="../dup/">Finding Duplicate Files</a></li>
+<li><a href="../glob/">Matching Patterns</a></li>
+<li><a href="../parse/">Parsing Text</a></li>
+<li><a href="../test/">Running Tests</a></li>
+<li><a href="../interp/">An Interpreter</a></li>
+<li><a href="../func/">Functions and Closures</a></li>
+<li><a href="../archive/">A File Archiver</a></li>
+<li><a href="../check/">An HTML Validator</a></li>
+<li><a href="../template/">A Template Expander</a></li>
+<li><a href="../lint/">A Code Linter</a></li>
+<li><a href="../layout/">Page Layout</a></li>
+<li><a class="active" href="../binary/">Binary Data</a></li>
+<li><a href="../db/">A Database</a></li>
+<li><a href="../build/">A Build Manager</a></li>
+<li><a href="../pack/">A Package Manager</a></li>
+<li><a href="../vm/">A Virtual Machine</a></li>
+<li><a href="../docgen/">Generating Documentation</a></li>
+<li><a href="../finale/">Conclusion</a></li>
+</ul>
+</div>
+<div class="dropdown">
+<button aria-controls="nav-appendices" aria-haspopup="true">Appendices</button>
+<ul class="dropdown-content" id="nav-appendices">
+<li><a href="../license/">License</a></li>
+<li><a href="../conduct/">Code of Conduct</a></li>
+<li><a href="../contributing/">Contributing</a></li>
+<li><a href="../bibliography/">Bibliography</a></li>
+<li><a href="../glossary/">Glossary</a></li>
+</ul>
+</div>
+<a href="https://github.com/gvwilson/webllm">Repository</a>
+</div>
+</nav>
+<main id="main-content">
+<h1>Binary Data</h1>
+<h2>Outline</h2>
+<ul>
+<li>Lean's <code>UInt8</code>, <code>UInt16</code>, <code>UInt32</code>, <code>UInt64</code> types store unsigned integers in
+  fixed-width two's complement representation</li>
+<li>Bitwise operators <code>&amp;&amp;&amp;</code>, <code>|||</code>, <code>^^^</code>, <code>&lt;&lt;&lt;</code>, <code>&gt;&gt;&gt;</code> work directly on these types</li>
+<li>Two's complement: negation of an N-bit unsigned value <code>x</code> is <code>(max + 1 - x) mod 2^N</code>
+  — demonstrated by showing that <code>x + (-x) == 0</code> in <code>UInt8</code> arithmetic</li>
+<li>Character encodings: <code>Char.toNat</code> gives the Unicode code point; UTF-8 encodes code
+  points &lt; 128 as single bytes (ASCII-compatible)</li>
+<li>Packing multiple values into a single word using shifts and masks</li>
+</ul>
+<h2>Code</h2>
+<div data-inc="code.lean"><span aria-label="Source: binary/code.lean" class="inc-path" role="img" tabindex="0" title="binary/code.lean">i</span><div class="codehilite"><pre class="" tabindex="0"><span></span><code><span class="c1">-- UInt8 arithmetic wraps at 256 (two's complement)</span>
+<span class="bp">#</span><span class="n">guard</span><span class="w"> </span><span class="o">(</span><span class="mi">255</span><span class="w"> </span><span class="o">:</span><span class="w"> </span><span class="n">UInt8</span><span class="o">)</span><span class="w"> </span><span class="bp">+</span><span class="w"> </span><span class="mi">1</span><span class="w"> </span><span class="bp">==</span><span class="w"> </span><span class="mi">0</span><span class="w">        </span><span class="c1">-- overflow wraps</span>
+<span class="bp">#</span><span class="n">guard</span><span class="w"> </span><span class="o">(</span><span class="mi">0</span><span class="w">   </span><span class="o">:</span><span class="w"> </span><span class="n">UInt8</span><span class="o">)</span><span class="w"> </span><span class="bp">-</span><span class="w"> </span><span class="mi">1</span><span class="w"> </span><span class="bp">==</span><span class="w"> </span><span class="mi">255</span><span class="w">      </span><span class="c1">-- underflow wraps</span>
+
+<span class="c1">-- Negation in two's complement: x + (-x) == 0</span>
+<span class="kn">def</span><span class="w"> </span><span class="n">twosComplement</span><span class="w"> </span><span class="o">(</span><span class="n">x</span><span class="w"> </span><span class="o">:</span><span class="w"> </span><span class="n">UInt8</span><span class="o">)</span><span class="w"> </span><span class="o">:</span><span class="w"> </span><span class="n">UInt8</span><span class="w"> </span><span class="o">:=</span><span class="w"> </span><span class="o">(</span><span class="bp">~~~</span><span class="n">x</span><span class="o">)</span><span class="w"> </span><span class="bp">+</span><span class="w"> </span><span class="mi">1</span><span class="w">   </span><span class="c1">-- bitwise NOT + 1</span>
+
+<span class="bp">#</span><span class="n">guard</span><span class="w"> </span><span class="o">(</span><span class="mi">5</span><span class="w"> </span><span class="o">:</span><span class="w"> </span><span class="n">UInt8</span><span class="o">)</span><span class="w"> </span><span class="bp">+</span><span class="w"> </span><span class="n">twosComplement</span><span class="w"> </span><span class="mi">5</span><span class="w"> </span><span class="bp">==</span><span class="w"> </span><span class="mi">0</span>
+<span class="bp">#</span><span class="n">guard</span><span class="w"> </span><span class="n">twosComplement</span><span class="w"> </span><span class="mi">0</span><span class="w"> </span><span class="bp">==</span><span class="w"> </span><span class="mi">0</span><span class="w">            </span><span class="c1">-- -0 = 0</span>
+
+<span class="c1">-- Bitwise operations</span>
+<span class="kn">def</span><span class="w"> </span><span class="n">extractNibbles</span><span class="w"> </span><span class="o">(</span><span class="n">b</span><span class="w"> </span><span class="o">:</span><span class="w"> </span><span class="n">UInt8</span><span class="o">)</span><span class="w"> </span><span class="o">:</span><span class="w"> </span><span class="n">UInt8</span><span class="w"> </span><span class="bp">×</span><span class="w"> </span><span class="n">UInt8</span><span class="w"> </span><span class="o">:=</span>
+<span class="w">  </span><span class="o">(</span><span class="n">b</span><span class="w"> </span><span class="bp">&gt;&gt;&gt;</span><span class="w"> </span><span class="mi">4</span><span class="o">,</span><span class="w"> </span><span class="n">b</span><span class="w"> </span><span class="bp">&amp;&amp;&amp;</span><span class="w"> </span><span class="mi">0</span><span class="n">x0F</span><span class="o">)</span><span class="w">   </span><span class="c1">-- high nibble, low nibble</span>
+
+<span class="bp">#</span><span class="n">guard</span><span class="w"> </span><span class="n">extractNibbles</span><span class="w"> </span><span class="mi">0</span><span class="n">xAB</span><span class="w"> </span><span class="bp">==</span><span class="w"> </span><span class="o">(</span><span class="mi">0</span><span class="n">x0A</span><span class="o">,</span><span class="w"> </span><span class="mi">0</span><span class="n">x0B</span><span class="o">)</span>
+
+<span class="kn">def</span><span class="w"> </span><span class="n">packNibbles</span><span class="w"> </span><span class="o">(</span><span class="n">hi</span><span class="w"> </span><span class="n">lo</span><span class="w"> </span><span class="o">:</span><span class="w"> </span><span class="n">UInt8</span><span class="o">)</span><span class="w"> </span><span class="o">:</span><span class="w"> </span><span class="n">UInt8</span><span class="w"> </span><span class="o">:=</span>
+<span class="w">  </span><span class="o">(</span><span class="n">hi</span><span class="w"> </span><span class="bp">&lt;&lt;&lt;</span><span class="w"> </span><span class="mi">4</span><span class="o">)</span><span class="w"> </span><span class="bp">|||</span><span class="w"> </span><span class="o">(</span><span class="n">lo</span><span class="w"> </span><span class="bp">&amp;&amp;&amp;</span><span class="w"> </span><span class="mi">0</span><span class="n">x0F</span><span class="o">)</span>
+
+<span class="bp">#</span><span class="n">guard</span><span class="w"> </span><span class="n">packNibbles</span><span class="w"> </span><span class="mi">0</span><span class="n">xA</span><span class="w"> </span><span class="mi">0</span><span class="n">xB</span><span class="w"> </span><span class="bp">==</span><span class="w"> </span><span class="mi">0</span><span class="n">xAB</span>
+
+<span class="c1">-- Counting set bits (popcount) using shifts</span>
+<span class="kn">def</span><span class="w"> </span><span class="n">popcount</span><span class="w"> </span><span class="o">(</span><span class="n">b</span><span class="w"> </span><span class="o">:</span><span class="w"> </span><span class="n">UInt8</span><span class="o">)</span><span class="w"> </span><span class="o">:</span><span class="w"> </span><span class="n">Nat</span><span class="w"> </span><span class="o">:=</span>
+<span class="w">  </span><span class="o">(</span><span class="n">List</span><span class="bp">.</span><span class="n">range</span><span class="w"> </span><span class="mi">8</span><span class="o">)</span><span class="bp">.</span><span class="n">foldl</span><span class="w"> </span><span class="o">(</span><span class="n">init</span><span class="w"> </span><span class="o">:=</span><span class="w"> </span><span class="mi">0</span><span class="o">)</span><span class="w"> </span><span class="k">fun</span><span class="w"> </span><span class="n">acc</span><span class="w"> </span><span class="n">i</span><span class="w"> </span><span class="bp">=&gt;</span>
+<span class="w">    </span><span class="n">acc</span><span class="w"> </span><span class="bp">+</span><span class="w"> </span><span class="o">((</span><span class="n">b</span><span class="w"> </span><span class="bp">&gt;&gt;&gt;</span><span class="w"> </span><span class="n">i</span><span class="bp">.</span><span class="n">toUInt8</span><span class="o">)</span><span class="w"> </span><span class="bp">&amp;&amp;&amp;</span><span class="w"> </span><span class="mi">1</span><span class="o">)</span><span class="bp">.</span><span class="n">toNat</span>
+
+<span class="bp">#</span><span class="n">guard</span><span class="w"> </span><span class="n">popcount</span><span class="w"> </span><span class="mi">0</span><span class="n">b10110101</span><span class="w"> </span><span class="bp">==</span><span class="w"> </span><span class="mi">5</span>
+<span class="bp">#</span><span class="n">guard</span><span class="w"> </span><span class="n">popcount</span><span class="w"> </span><span class="mi">0</span><span class="n">xFF</span><span class="w"> </span><span class="bp">==</span><span class="w"> </span><span class="mi">8</span>
+<span class="bp">#</span><span class="n">guard</span><span class="w"> </span><span class="n">popcount</span><span class="w"> </span><span class="mi">0</span><span class="n">x00</span><span class="w"> </span><span class="bp">==</span><span class="w"> </span><span class="mi">0</span>
+
+<span class="c1">-- Character / UTF-8 basics</span>
+<span class="c1">-- ASCII characters have code points 0–127 and encode as single bytes</span>
+<span class="kn">def</span><span class="w"> </span><span class="n">isAscii</span><span class="w"> </span><span class="o">(</span><span class="n">c</span><span class="w"> </span><span class="o">:</span><span class="w"> </span><span class="n">Char</span><span class="o">)</span><span class="w"> </span><span class="o">:</span><span class="w"> </span><span class="n">Bool</span><span class="w"> </span><span class="o">:=</span><span class="w"> </span><span class="n">c</span><span class="bp">.</span><span class="n">toNat</span><span class="w"> </span><span class="bp">&lt;</span><span class="w"> </span><span class="mi">128</span>
+<span class="kn">def</span><span class="w"> </span><span class="n">toUtf8SingleByte</span><span class="w"> </span><span class="o">(</span><span class="n">c</span><span class="w"> </span><span class="o">:</span><span class="w"> </span><span class="n">Char</span><span class="o">)</span><span class="w"> </span><span class="o">:</span><span class="w"> </span><span class="n">Option</span><span class="w"> </span><span class="n">UInt8</span><span class="w"> </span><span class="o">:=</span>
+<span class="w">  </span><span class="k">if</span><span class="w"> </span><span class="n">isAscii</span><span class="w"> </span><span class="n">c</span><span class="w"> </span><span class="k">then</span><span class="w"> </span><span class="n">some</span><span class="w"> </span><span class="n">c</span><span class="bp">.</span><span class="n">toNat</span><span class="bp">.</span><span class="n">toUInt8</span><span class="w"> </span><span class="k">else</span><span class="w"> </span><span class="n">none</span>
+
+<span class="bp">#</span><span class="n">guard</span><span class="w"> </span><span class="n">toUtf8SingleByte</span><span class="w"> </span><span class="bp">'</span><span class="n">A'</span><span class="w"> </span><span class="bp">==</span><span class="w"> </span><span class="n">some</span><span class="w"> </span><span class="mi">65</span>
+<span class="bp">#</span><span class="n">guard</span><span class="w"> </span><span class="n">toUtf8SingleByte</span><span class="w"> </span><span class="bp">'</span><span class="n">A'</span><span class="w"> </span><span class="bp">==</span><span class="w"> </span><span class="n">some</span><span class="w"> </span><span class="mi">0</span><span class="n">x41</span>
+<span class="bp">#</span><span class="n">guard</span><span class="w"> </span><span class="o">(</span><span class="n">toUtf8SingleByte</span><span class="w"> </span><span class="bp">'é'</span><span class="o">)</span><span class="bp">.</span><span class="n">isNone</span><span class="w">    </span><span class="c1">-- é is code point 233, needs 2 bytes</span>
+
+<span class="c1">-- Packing two UInt8 values into a UInt16</span>
+<span class="kn">def</span><span class="w"> </span><span class="n">pack16</span><span class="w"> </span><span class="o">(</span><span class="n">hi</span><span class="w"> </span><span class="n">lo</span><span class="w"> </span><span class="o">:</span><span class="w"> </span><span class="n">UInt8</span><span class="o">)</span><span class="w"> </span><span class="o">:</span><span class="w"> </span><span class="n">UInt16</span><span class="w"> </span><span class="o">:=</span>
+<span class="w">  </span><span class="o">(</span><span class="n">hi</span><span class="bp">.</span><span class="n">toUInt16</span><span class="w"> </span><span class="bp">&lt;&lt;&lt;</span><span class="w"> </span><span class="mi">8</span><span class="o">)</span><span class="w"> </span><span class="bp">|||</span><span class="w"> </span><span class="n">lo</span><span class="bp">.</span><span class="n">toUInt16</span>
+
+<span class="kn">def</span><span class="w"> </span><span class="n">unpack16</span><span class="w"> </span><span class="o">(</span><span class="n">w</span><span class="w"> </span><span class="o">:</span><span class="w"> </span><span class="n">UInt16</span><span class="o">)</span><span class="w"> </span><span class="o">:</span><span class="w"> </span><span class="n">UInt8</span><span class="w"> </span><span class="bp">×</span><span class="w"> </span><span class="n">UInt8</span><span class="w"> </span><span class="o">:=</span>
+<span class="w">  </span><span class="o">((</span><span class="n">w</span><span class="w"> </span><span class="bp">&gt;&gt;&gt;</span><span class="w"> </span><span class="mi">8</span><span class="o">)</span><span class="bp">.</span><span class="n">toUInt8</span><span class="o">,</span><span class="w"> </span><span class="n">w</span><span class="bp">.</span><span class="n">toUInt8</span><span class="o">)</span>
+
+<span class="bp">#</span><span class="n">guard</span><span class="w"> </span><span class="n">pack16</span><span class="w"> </span><span class="mi">0</span><span class="n">xCA</span><span class="w"> </span><span class="mi">0</span><span class="n">xFE</span><span class="w"> </span><span class="bp">==</span><span class="w"> </span><span class="mi">0</span><span class="n">xCAFE</span>
+<span class="bp">#</span><span class="n">guard</span><span class="w"> </span><span class="n">unpack16</span><span class="w"> </span><span class="mi">0</span><span class="n">xCAFE</span><span class="w"> </span><span class="bp">==</span><span class="w"> </span><span class="o">(</span><span class="mi">0</span><span class="n">xCA</span><span class="o">,</span><span class="w"> </span><span class="mi">0</span><span class="n">xFE</span><span class="o">)</span>
+</code></pre></div>
+</div>
+</main>
+<footer aria-label="Page navigation">
+<div class="row">
+<div class="col-3 left">
+<span aria-hidden="true">⇐</span> <a href="../layout/">Page Layout</a>
+</div>
+<div class="col-6 center">
+<a href="../">sdxl</a>
+	  ©
+	  <a href="../#acknowledgments">the authors</a>
+</div>
+<div class="col-3 right">
+<a href="../db/">A Database</a> <span aria-hidden="true">⇒</span>
+</div>
+</div>
+</footer>
+</body>
+</html>

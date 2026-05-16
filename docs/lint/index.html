@@ -1,0 +1,175 @@
+<!DOCTYPE html>
+
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>A Code Linter</title>
+<meta content="Software Design by Example in Lean" name="description"/>
+<link href="../_static/favicon.ico" rel="icon" type="image/x-icon"/>
+<link href="../_static/pygments.css" rel="stylesheet" type="text/css"/>
+<link href="../_static/chota.css" rel="stylesheet" type="text/css"/>
+<link href="../_static/mccole.css" rel="stylesheet" type="text/css"/>
+</head>
+<body>
+<a class="skip-link" href="#main-content">Skip to main content</a>
+<nav aria-label="Site navigation" class="nav">
+<div class="nav-left">
+<a class="brand" href="../">sdxl</a>
+<div class="dropdown">
+<button aria-controls="nav-lessons" aria-haspopup="true">Lessons</button>
+<ul class="dropdown-content" id="nav-lessons">
+<li><a href="../intro/">Introduction</a></li>
+<li><a href="../oop/">Objects and Classes</a></li>
+<li><a href="../dup/">Finding Duplicate Files</a></li>
+<li><a href="../glob/">Matching Patterns</a></li>
+<li><a href="../parse/">Parsing Text</a></li>
+<li><a href="../test/">Running Tests</a></li>
+<li><a href="../interp/">An Interpreter</a></li>
+<li><a href="../func/">Functions and Closures</a></li>
+<li><a href="../archive/">A File Archiver</a></li>
+<li><a href="../check/">An HTML Validator</a></li>
+<li><a href="../template/">A Template Expander</a></li>
+<li><a class="active" href="../lint/">A Code Linter</a></li>
+<li><a href="../layout/">Page Layout</a></li>
+<li><a href="../binary/">Binary Data</a></li>
+<li><a href="../db/">A Database</a></li>
+<li><a href="../build/">A Build Manager</a></li>
+<li><a href="../pack/">A Package Manager</a></li>
+<li><a href="../vm/">A Virtual Machine</a></li>
+<li><a href="../docgen/">Generating Documentation</a></li>
+<li><a href="../finale/">Conclusion</a></li>
+</ul>
+</div>
+<div class="dropdown">
+<button aria-controls="nav-appendices" aria-haspopup="true">Appendices</button>
+<ul class="dropdown-content" id="nav-appendices">
+<li><a href="../license/">License</a></li>
+<li><a href="../conduct/">Code of Conduct</a></li>
+<li><a href="../contributing/">Contributing</a></li>
+<li><a href="../bibliography/">Bibliography</a></li>
+<li><a href="../glossary/">Glossary</a></li>
+</ul>
+</div>
+<a href="https://github.com/gvwilson/webllm">Repository</a>
+</div>
+</nav>
+<main id="main-content">
+<h1>A Code Linter</h1>
+<h2>Outline</h2>
+<ul>
+<li>Define a simplified <code>Stmt</code> AST: <code>Assign</code>, <code>If</code>, <code>While</code>, <code>Block</code>, <code>Dict</code> (literal),
+  <code>Call</code></li>
+<li>Visitor pattern: a record of per-node handlers; <code>walk</code> dispatches to the right one
+  and recurses</li>
+<li>Linter 1: find duplicate keys in dictionary literals by collecting all <code>Dict</code> nodes</li>
+<li>Linter 2: find variables assigned but never used in a block</li>
+<li>Each linter is a separate function over the same <code>walk</code> infrastructure — open for
+  extension, closed for modification</li>
+</ul>
+<h2>Code</h2>
+<div data-inc="code.lean"><span aria-label="Source: lint/code.lean" class="inc-path" role="img" tabindex="0" title="lint/code.lean">i</span><div class="codehilite"><pre class="" tabindex="0"><span></span><code><span class="c1">-- Simplified AST</span>
+<span class="kn">inductive</span><span class="w"> </span><span class="n">Expr</span><span class="w"> </span><span class="kn">where</span>
+<span class="w">  </span><span class="bp">|</span><span class="w"> </span><span class="n">Num</span><span class="w">  </span><span class="o">:</span><span class="w"> </span><span class="n">Int</span><span class="w"> </span><span class="bp">→</span><span class="w"> </span><span class="n">Expr</span>
+<span class="w">  </span><span class="bp">|</span><span class="w"> </span><span class="n">Var</span><span class="w">  </span><span class="o">:</span><span class="w"> </span><span class="n">String</span><span class="w"> </span><span class="bp">→</span><span class="w"> </span><span class="n">Expr</span>
+<span class="w">  </span><span class="bp">|</span><span class="w"> </span><span class="n">Dict</span><span class="w"> </span><span class="o">:</span><span class="w"> </span><span class="n">List</span><span class="w"> </span><span class="o">(</span><span class="n">String</span><span class="w"> </span><span class="bp">×</span><span class="w"> </span><span class="n">Expr</span><span class="o">)</span><span class="w"> </span><span class="bp">→</span><span class="w"> </span><span class="n">Expr</span><span class="w">   </span><span class="c1">-- {key: val, ...}</span>
+<span class="w">  </span><span class="bp">|</span><span class="w"> </span><span class="n">Call</span><span class="w"> </span><span class="o">:</span><span class="w"> </span><span class="n">String</span><span class="w"> </span><span class="bp">→</span><span class="w"> </span><span class="n">List</span><span class="w"> </span><span class="n">Expr</span><span class="w"> </span><span class="bp">→</span><span class="w"> </span><span class="n">Expr</span>
+<span class="w">  </span><span class="n">deriving</span><span class="w"> </span><span class="n">Repr</span>
+
+<span class="kn">inductive</span><span class="w"> </span><span class="n">Stmt</span><span class="w"> </span><span class="kn">where</span>
+<span class="w">  </span><span class="bp">|</span><span class="w"> </span><span class="n">Assign</span><span class="w"> </span><span class="o">:</span><span class="w"> </span><span class="n">String</span><span class="w"> </span><span class="bp">→</span><span class="w"> </span><span class="n">Expr</span><span class="w"> </span><span class="bp">→</span><span class="w"> </span><span class="n">Stmt</span>
+<span class="w">  </span><span class="bp">|</span><span class="w"> </span><span class="n">If</span><span class="w">     </span><span class="o">:</span><span class="w"> </span><span class="n">Expr</span><span class="w"> </span><span class="bp">→</span><span class="w"> </span><span class="n">Stmt</span><span class="w"> </span><span class="bp">→</span><span class="w"> </span><span class="n">Stmt</span><span class="w"> </span><span class="bp">→</span><span class="w"> </span><span class="n">Stmt</span>
+<span class="w">  </span><span class="bp">|</span><span class="w"> </span><span class="n">While</span><span class="w">  </span><span class="o">:</span><span class="w"> </span><span class="n">Expr</span><span class="w"> </span><span class="bp">→</span><span class="w"> </span><span class="n">Stmt</span><span class="w"> </span><span class="bp">→</span><span class="w"> </span><span class="n">Stmt</span>
+<span class="w">  </span><span class="bp">|</span><span class="w"> </span><span class="n">Block</span><span class="w">  </span><span class="o">:</span><span class="w"> </span><span class="n">List</span><span class="w"> </span><span class="n">Stmt</span><span class="w"> </span><span class="bp">→</span><span class="w"> </span><span class="n">Stmt</span>
+<span class="w">  </span><span class="bp">|</span><span class="w"> </span><span class="n">Expr</span><span class="w">   </span><span class="o">:</span><span class="w"> </span><span class="n">Expr</span><span class="w"> </span><span class="bp">→</span><span class="w"> </span><span class="n">Stmt</span>
+<span class="w">  </span><span class="n">deriving</span><span class="w"> </span><span class="n">Repr</span>
+
+<span class="c1">-- Visitor: collect results of type α by walking every node</span>
+<span class="kn">def</span><span class="w"> </span><span class="n">walkExpr</span><span class="w"> </span><span class="o">{</span><span class="n">α</span><span class="o">}</span><span class="w"> </span><span class="o">(</span><span class="n">onDict</span><span class="w"> </span><span class="o">:</span><span class="w"> </span><span class="n">List</span><span class="w"> </span><span class="o">(</span><span class="n">String</span><span class="w"> </span><span class="bp">×</span><span class="w"> </span><span class="n">Expr</span><span class="o">)</span><span class="w"> </span><span class="bp">→</span><span class="w"> </span><span class="n">List</span><span class="w"> </span><span class="n">α</span><span class="o">)</span>
+<span class="w">                 </span><span class="o">(</span><span class="n">e</span><span class="w"> </span><span class="o">:</span><span class="w"> </span><span class="n">Expr</span><span class="o">)</span><span class="w"> </span><span class="o">:</span><span class="w"> </span><span class="n">List</span><span class="w"> </span><span class="n">α</span><span class="w"> </span><span class="o">:=</span>
+<span class="w">  </span><span class="k">match</span><span class="w"> </span><span class="n">e</span><span class="w"> </span><span class="k">with</span>
+<span class="w">  </span><span class="bp">|</span><span class="w"> </span><span class="n">Expr</span><span class="bp">.</span><span class="n">Dict</span><span class="w"> </span><span class="n">pairs</span><span class="w"> </span><span class="bp">=&gt;</span>
+<span class="w">      </span><span class="n">onDict</span><span class="w"> </span><span class="n">pairs</span><span class="w"> </span><span class="bp">++</span><span class="w"> </span><span class="n">pairs</span><span class="bp">.</span><span class="n">bind</span><span class="w"> </span><span class="o">(</span><span class="k">fun</span><span class="w"> </span><span class="o">(</span><span class="bp">_</span><span class="o">,</span><span class="w"> </span><span class="n">v</span><span class="o">)</span><span class="w"> </span><span class="bp">=&gt;</span><span class="w"> </span><span class="n">walkExpr</span><span class="w"> </span><span class="n">onDict</span><span class="w"> </span><span class="n">v</span><span class="o">)</span>
+<span class="w">  </span><span class="bp">|</span><span class="w"> </span><span class="n">Expr</span><span class="bp">.</span><span class="n">Call</span><span class="w"> </span><span class="bp">_</span><span class="w"> </span><span class="n">args</span><span class="w"> </span><span class="bp">=&gt;</span>
+<span class="w">      </span><span class="n">args</span><span class="bp">.</span><span class="n">bind</span><span class="w"> </span><span class="o">(</span><span class="n">walkExpr</span><span class="w"> </span><span class="n">onDict</span><span class="o">)</span>
+<span class="w">  </span><span class="bp">|</span><span class="w"> </span><span class="bp">_</span><span class="w"> </span><span class="bp">=&gt;</span><span class="w"> </span><span class="o">[]</span>
+
+<span class="kn">def</span><span class="w"> </span><span class="n">walkStmt</span><span class="w"> </span><span class="o">{</span><span class="n">α</span><span class="o">}</span><span class="w"> </span><span class="o">(</span><span class="n">onDict</span><span class="w"> </span><span class="o">:</span><span class="w"> </span><span class="n">List</span><span class="w"> </span><span class="o">(</span><span class="n">String</span><span class="w"> </span><span class="bp">×</span><span class="w"> </span><span class="n">Expr</span><span class="o">)</span><span class="w"> </span><span class="bp">→</span><span class="w"> </span><span class="n">List</span><span class="w"> </span><span class="n">α</span><span class="o">)</span>
+<span class="w">                 </span><span class="o">(</span><span class="n">s</span><span class="w"> </span><span class="o">:</span><span class="w"> </span><span class="n">Stmt</span><span class="o">)</span><span class="w"> </span><span class="o">:</span><span class="w"> </span><span class="n">List</span><span class="w"> </span><span class="n">α</span><span class="w"> </span><span class="o">:=</span>
+<span class="w">  </span><span class="k">match</span><span class="w"> </span><span class="n">s</span><span class="w"> </span><span class="k">with</span>
+<span class="w">  </span><span class="bp">|</span><span class="w"> </span><span class="n">Stmt</span><span class="bp">.</span><span class="n">Assign</span><span class="w"> </span><span class="bp">_</span><span class="w"> </span><span class="n">e</span><span class="w">   </span><span class="bp">=&gt;</span><span class="w"> </span><span class="n">walkExpr</span><span class="w"> </span><span class="n">onDict</span><span class="w"> </span><span class="n">e</span>
+<span class="w">  </span><span class="bp">|</span><span class="w"> </span><span class="n">Stmt</span><span class="bp">.</span><span class="n">If</span><span class="w"> </span><span class="n">c</span><span class="w"> </span><span class="n">t</span><span class="w"> </span><span class="n">f</span><span class="w">     </span><span class="bp">=&gt;</span><span class="w"> </span><span class="n">walkExpr</span><span class="w"> </span><span class="n">onDict</span><span class="w"> </span><span class="n">c</span>
+<span class="w">                      </span><span class="bp">++</span><span class="w"> </span><span class="n">walkStmt</span><span class="w"> </span><span class="n">onDict</span><span class="w"> </span><span class="n">t</span>
+<span class="w">                      </span><span class="bp">++</span><span class="w"> </span><span class="n">walkStmt</span><span class="w"> </span><span class="n">onDict</span><span class="w"> </span><span class="n">f</span>
+<span class="w">  </span><span class="bp">|</span><span class="w"> </span><span class="n">Stmt</span><span class="bp">.</span><span class="n">While</span><span class="w"> </span><span class="n">c</span><span class="w"> </span><span class="n">b</span><span class="w">    </span><span class="bp">=&gt;</span><span class="w"> </span><span class="n">walkExpr</span><span class="w"> </span><span class="n">onDict</span><span class="w"> </span><span class="n">c</span><span class="w"> </span><span class="bp">++</span><span class="w"> </span><span class="n">walkStmt</span><span class="w"> </span><span class="n">onDict</span><span class="w"> </span><span class="n">b</span>
+<span class="w">  </span><span class="bp">|</span><span class="w"> </span><span class="n">Stmt</span><span class="bp">.</span><span class="n">Block</span><span class="w"> </span><span class="n">stmts</span><span class="w">  </span><span class="bp">=&gt;</span><span class="w"> </span><span class="n">stmts</span><span class="bp">.</span><span class="n">bind</span><span class="w"> </span><span class="o">(</span><span class="n">walkStmt</span><span class="w"> </span><span class="n">onDict</span><span class="o">)</span>
+<span class="w">  </span><span class="bp">|</span><span class="w"> </span><span class="n">Stmt</span><span class="bp">.</span><span class="n">Expr</span><span class="w"> </span><span class="n">e</span><span class="w">       </span><span class="bp">=&gt;</span><span class="w"> </span><span class="n">walkExpr</span><span class="w"> </span><span class="n">onDict</span><span class="w"> </span><span class="n">e</span>
+
+<span class="c1">-- Linter 1: duplicate dictionary keys ---------------------------------</span>
+
+<span class="kn">def</span><span class="w"> </span><span class="n">dupKeys</span><span class="w"> </span><span class="o">(</span><span class="n">pairs</span><span class="w"> </span><span class="o">:</span><span class="w"> </span><span class="n">List</span><span class="w"> </span><span class="o">(</span><span class="n">String</span><span class="w"> </span><span class="bp">×</span><span class="w"> </span><span class="n">Expr</span><span class="o">))</span><span class="w"> </span><span class="o">:</span><span class="w"> </span><span class="n">List</span><span class="w"> </span><span class="n">String</span><span class="w"> </span><span class="o">:=</span>
+<span class="w">  </span><span class="k">let</span><span class="w"> </span><span class="n">keys</span><span class="w"> </span><span class="o">:=</span><span class="w"> </span><span class="n">pairs</span><span class="bp">.</span><span class="n">map</span><span class="w"> </span><span class="o">(</span><span class="bp">·.</span><span class="m">1</span><span class="o">)</span>
+<span class="w">  </span><span class="n">keys</span><span class="bp">.</span><span class="n">filter</span><span class="w"> </span><span class="k">fun</span><span class="w"> </span><span class="n">k</span><span class="w"> </span><span class="bp">=&gt;</span><span class="w"> </span><span class="n">keys</span><span class="bp">.</span><span class="n">count</span><span class="w"> </span><span class="n">k</span><span class="w"> </span><span class="bp">&gt;</span><span class="w"> </span><span class="mi">1</span>
+
+<span class="kn">def</span><span class="w"> </span><span class="n">findDupKeys</span><span class="w"> </span><span class="o">(</span><span class="n">s</span><span class="w"> </span><span class="o">:</span><span class="w"> </span><span class="n">Stmt</span><span class="o">)</span><span class="w"> </span><span class="o">:</span><span class="w"> </span><span class="n">List</span><span class="w"> </span><span class="n">String</span><span class="w"> </span><span class="o">:=</span>
+<span class="w">  </span><span class="n">walkStmt</span><span class="w"> </span><span class="n">dupKeys</span><span class="w"> </span><span class="n">s</span>
+
+<span class="c1">-- Linter 2: assigned-but-unused variables in a block -----------------</span>
+
+<span class="kn">def</span><span class="w"> </span><span class="n">assignedVars</span><span class="w"> </span><span class="o">(</span><span class="n">stmts</span><span class="w"> </span><span class="o">:</span><span class="w"> </span><span class="n">List</span><span class="w"> </span><span class="n">Stmt</span><span class="o">)</span><span class="w"> </span><span class="o">:</span><span class="w"> </span><span class="n">List</span><span class="w"> </span><span class="n">String</span><span class="w"> </span><span class="o">:=</span>
+<span class="w">  </span><span class="n">stmts</span><span class="bp">.</span><span class="n">filterMap</span><span class="w"> </span><span class="k">fun</span><span class="w"> </span><span class="n">s</span><span class="w"> </span><span class="bp">=&gt;</span><span class="w"> </span><span class="k">match</span><span class="w"> </span><span class="n">s</span><span class="w"> </span><span class="k">with</span>
+<span class="w">    </span><span class="bp">|</span><span class="w"> </span><span class="n">Stmt</span><span class="bp">.</span><span class="n">Assign</span><span class="w"> </span><span class="n">name</span><span class="w"> </span><span class="bp">_</span><span class="w"> </span><span class="bp">=&gt;</span><span class="w"> </span><span class="n">some</span><span class="w"> </span><span class="n">name</span>
+<span class="w">    </span><span class="bp">|</span><span class="w"> </span><span class="bp">_</span><span class="w">                  </span><span class="bp">=&gt;</span><span class="w"> </span><span class="n">none</span>
+
+<span class="kn">def</span><span class="w"> </span><span class="n">usedVars</span><span class="w"> </span><span class="o">(</span><span class="n">s</span><span class="w"> </span><span class="o">:</span><span class="w"> </span><span class="n">Stmt</span><span class="o">)</span><span class="w"> </span><span class="o">:</span><span class="w"> </span><span class="n">List</span><span class="w"> </span><span class="n">String</span><span class="w"> </span><span class="o">:=</span>
+<span class="w">  </span><span class="n">walkStmt</span><span class="w"> </span><span class="o">(</span><span class="k">fun</span><span class="w"> </span><span class="bp">_</span><span class="w"> </span><span class="bp">=&gt;</span><span class="w"> </span><span class="o">[])</span><span class="w"> </span><span class="n">s</span><span class="w">  </span><span class="c1">-- not quite right; helper below</span>
+<span class="c1">-- (proper version collects Var references)</span>
+<span class="kn">def</span><span class="w"> </span><span class="n">usedVarsExpr</span><span class="w"> </span><span class="o">(</span><span class="n">e</span><span class="w"> </span><span class="o">:</span><span class="w"> </span><span class="n">Expr</span><span class="o">)</span><span class="w"> </span><span class="o">:</span><span class="w"> </span><span class="n">List</span><span class="w"> </span><span class="n">String</span><span class="w"> </span><span class="o">:=</span>
+<span class="w">  </span><span class="k">match</span><span class="w"> </span><span class="n">e</span><span class="w"> </span><span class="k">with</span>
+<span class="w">  </span><span class="bp">|</span><span class="w"> </span><span class="n">Expr</span><span class="bp">.</span><span class="n">Var</span><span class="w"> </span><span class="n">n</span><span class="w">     </span><span class="bp">=&gt;</span><span class="w"> </span><span class="o">[</span><span class="n">n</span><span class="o">]</span>
+<span class="w">  </span><span class="bp">|</span><span class="w"> </span><span class="n">Expr</span><span class="bp">.</span><span class="n">Dict</span><span class="w"> </span><span class="n">ps</span><span class="w">   </span><span class="bp">=&gt;</span><span class="w"> </span><span class="n">ps</span><span class="bp">.</span><span class="n">bind</span><span class="w"> </span><span class="o">(</span><span class="k">fun</span><span class="w"> </span><span class="o">(</span><span class="bp">_</span><span class="o">,</span><span class="w"> </span><span class="n">v</span><span class="o">)</span><span class="w"> </span><span class="bp">=&gt;</span><span class="w"> </span><span class="n">usedVarsExpr</span><span class="w"> </span><span class="n">v</span><span class="o">)</span>
+<span class="w">  </span><span class="bp">|</span><span class="w"> </span><span class="n">Expr</span><span class="bp">.</span><span class="n">Call</span><span class="w"> </span><span class="bp">_</span><span class="w"> </span><span class="n">as</span><span class="w"> </span><span class="bp">=&gt;</span><span class="w"> </span><span class="n">as</span><span class="bp">.</span><span class="n">bind</span><span class="w"> </span><span class="n">usedVarsExpr</span>
+<span class="w">  </span><span class="bp">|</span><span class="w"> </span><span class="bp">_</span><span class="w">              </span><span class="bp">=&gt;</span><span class="w"> </span><span class="o">[]</span>
+
+<span class="kn">def</span><span class="w"> </span><span class="n">unusedVars</span><span class="w"> </span><span class="o">(</span><span class="n">stmts</span><span class="w"> </span><span class="o">:</span><span class="w"> </span><span class="n">List</span><span class="w"> </span><span class="n">Stmt</span><span class="o">)</span><span class="w"> </span><span class="o">:</span><span class="w"> </span><span class="n">List</span><span class="w"> </span><span class="n">String</span><span class="w"> </span><span class="o">:=</span>
+<span class="w">  </span><span class="k">let</span><span class="w"> </span><span class="n">assigned</span><span class="w"> </span><span class="o">:=</span><span class="w"> </span><span class="n">assignedVars</span><span class="w"> </span><span class="n">stmts</span>
+<span class="w">  </span><span class="k">let</span><span class="w"> </span><span class="n">used</span><span class="w"> </span><span class="o">:=</span><span class="w"> </span><span class="n">stmts</span><span class="bp">.</span><span class="n">bind</span><span class="w"> </span><span class="k">fun</span><span class="w"> </span><span class="n">s</span><span class="w"> </span><span class="bp">=&gt;</span><span class="w"> </span><span class="k">match</span><span class="w"> </span><span class="n">s</span><span class="w"> </span><span class="k">with</span>
+<span class="w">    </span><span class="bp">|</span><span class="w"> </span><span class="n">Stmt</span><span class="bp">.</span><span class="n">Assign</span><span class="w"> </span><span class="bp">_</span><span class="w"> </span><span class="n">e</span><span class="w"> </span><span class="bp">=&gt;</span><span class="w"> </span><span class="n">usedVarsExpr</span><span class="w"> </span><span class="n">e</span>
+<span class="w">    </span><span class="bp">|</span><span class="w"> </span><span class="n">Stmt</span><span class="bp">.</span><span class="n">Expr</span><span class="w"> </span><span class="n">e</span><span class="w">     </span><span class="bp">=&gt;</span><span class="w"> </span><span class="n">usedVarsExpr</span><span class="w"> </span><span class="n">e</span>
+<span class="w">    </span><span class="bp">|</span><span class="w"> </span><span class="bp">_</span><span class="w">               </span><span class="bp">=&gt;</span><span class="w"> </span><span class="o">[]</span>
+<span class="w">  </span><span class="n">assigned</span><span class="bp">.</span><span class="n">filter</span><span class="w"> </span><span class="o">(</span><span class="k">fun</span><span class="w"> </span><span class="n">v</span><span class="w"> </span><span class="bp">=&gt;</span><span class="w"> </span><span class="bp">!</span><span class="n">used</span><span class="bp">.</span><span class="n">contains</span><span class="w"> </span><span class="n">v</span><span class="o">)</span>
+
+<span class="c1">-- Tests ----------------------------------------------------------------</span>
+
+<span class="kn">def</span><span class="w"> </span><span class="n">dupDict</span><span class="w"> </span><span class="o">:</span><span class="w"> </span><span class="n">Stmt</span><span class="w"> </span><span class="o">:=</span>
+<span class="w">  </span><span class="n">Stmt</span><span class="bp">.</span><span class="n">Expr</span><span class="w"> </span><span class="o">(</span><span class="n">Expr</span><span class="bp">.</span><span class="n">Dict</span><span class="w"> </span><span class="o">[(</span><span class="s2">"a"</span><span class="o">,</span><span class="w"> </span><span class="n">Expr</span><span class="bp">.</span><span class="n">Num</span><span class="w"> </span><span class="mi">1</span><span class="o">),</span><span class="w"> </span><span class="o">(</span><span class="s2">"b"</span><span class="o">,</span><span class="w"> </span><span class="n">Expr</span><span class="bp">.</span><span class="n">Num</span><span class="w"> </span><span class="mi">2</span><span class="o">),</span><span class="w"> </span><span class="o">(</span><span class="s2">"a"</span><span class="o">,</span><span class="w"> </span><span class="n">Expr</span><span class="bp">.</span><span class="n">Num</span><span class="w"> </span><span class="mi">3</span><span class="o">)])</span>
+
+<span class="bp">#</span><span class="n">guard</span><span class="w"> </span><span class="n">findDupKeys</span><span class="w"> </span><span class="n">dupDict</span><span class="w"> </span><span class="bp">==</span><span class="w"> </span><span class="o">[</span><span class="s2">"a"</span><span class="o">,</span><span class="w"> </span><span class="s2">"a"</span><span class="o">]</span>
+
+<span class="kn">def</span><span class="w"> </span><span class="n">block</span><span class="w"> </span><span class="o">:</span><span class="w"> </span><span class="n">List</span><span class="w"> </span><span class="n">Stmt</span><span class="w"> </span><span class="o">:=</span><span class="w"> </span><span class="o">[</span>
+<span class="w">  </span><span class="n">Stmt</span><span class="bp">.</span><span class="n">Assign</span><span class="w"> </span><span class="s2">"x"</span><span class="w"> </span><span class="o">(</span><span class="n">Expr</span><span class="bp">.</span><span class="n">Num</span><span class="w"> </span><span class="mi">1</span><span class="o">),</span>
+<span class="w">  </span><span class="n">Stmt</span><span class="bp">.</span><span class="n">Assign</span><span class="w"> </span><span class="s2">"y"</span><span class="w"> </span><span class="o">(</span><span class="n">Expr</span><span class="bp">.</span><span class="n">Num</span><span class="w"> </span><span class="mi">2</span><span class="o">),</span>
+<span class="w">  </span><span class="n">Stmt</span><span class="bp">.</span><span class="n">Expr</span><span class="w"> </span><span class="o">(</span><span class="n">Expr</span><span class="bp">.</span><span class="n">Var</span><span class="w"> </span><span class="s2">"x"</span><span class="o">)</span><span class="w">   </span><span class="c1">-- x used, y never used</span>
+<span class="o">]</span>
+
+<span class="bp">#</span><span class="n">guard</span><span class="w"> </span><span class="n">unusedVars</span><span class="w"> </span><span class="n">block</span><span class="w"> </span><span class="bp">==</span><span class="w"> </span><span class="o">[</span><span class="s2">"y"</span><span class="o">]</span>
+</code></pre></div>
+</div>
+</main>
+<footer aria-label="Page navigation">
+<div class="row">
+<div class="col-3 left">
+<span aria-hidden="true">⇐</span> <a href="../template/">A Template Expander</a>
+</div>
+<div class="col-6 center">
+<a href="../">sdxl</a>
+	  ©
+	  <a href="../#acknowledgments">the authors</a>
+</div>
+<div class="col-3 right">
+<a href="../layout/">Page Layout</a> <span aria-hidden="true">⇒</span>
+</div>
+</div>
+</footer>
+</body>
+</html>

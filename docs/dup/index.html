@@ -1,0 +1,129 @@
+<!DOCTYPE html>
+
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Finding Duplicate Files</title>
+<meta content="Software Design by Example in Lean" name="description"/>
+<link href="../_static/favicon.ico" rel="icon" type="image/x-icon"/>
+<link href="../_static/pygments.css" rel="stylesheet" type="text/css"/>
+<link href="../_static/chota.css" rel="stylesheet" type="text/css"/>
+<link href="../_static/mccole.css" rel="stylesheet" type="text/css"/>
+</head>
+<body>
+<a class="skip-link" href="#main-content">Skip to main content</a>
+<nav aria-label="Site navigation" class="nav">
+<div class="nav-left">
+<a class="brand" href="../">sdxl</a>
+<div class="dropdown">
+<button aria-controls="nav-lessons" aria-haspopup="true">Lessons</button>
+<ul class="dropdown-content" id="nav-lessons">
+<li><a href="../intro/">Introduction</a></li>
+<li><a href="../oop/">Objects and Classes</a></li>
+<li><a class="active" href="../dup/">Finding Duplicate Files</a></li>
+<li><a href="../glob/">Matching Patterns</a></li>
+<li><a href="../parse/">Parsing Text</a></li>
+<li><a href="../test/">Running Tests</a></li>
+<li><a href="../interp/">An Interpreter</a></li>
+<li><a href="../func/">Functions and Closures</a></li>
+<li><a href="../archive/">A File Archiver</a></li>
+<li><a href="../check/">An HTML Validator</a></li>
+<li><a href="../template/">A Template Expander</a></li>
+<li><a href="../lint/">A Code Linter</a></li>
+<li><a href="../layout/">Page Layout</a></li>
+<li><a href="../binary/">Binary Data</a></li>
+<li><a href="../db/">A Database</a></li>
+<li><a href="../build/">A Build Manager</a></li>
+<li><a href="../pack/">A Package Manager</a></li>
+<li><a href="../vm/">A Virtual Machine</a></li>
+<li><a href="../docgen/">Generating Documentation</a></li>
+<li><a href="../finale/">Conclusion</a></li>
+</ul>
+</div>
+<div class="dropdown">
+<button aria-controls="nav-appendices" aria-haspopup="true">Appendices</button>
+<ul class="dropdown-content" id="nav-appendices">
+<li><a href="../license/">License</a></li>
+<li><a href="../conduct/">Code of Conduct</a></li>
+<li><a href="../contributing/">Contributing</a></li>
+<li><a href="../bibliography/">Bibliography</a></li>
+<li><a href="../glossary/">Glossary</a></li>
+</ul>
+</div>
+<a href="https://github.com/gvwilson/webllm">Repository</a>
+</div>
+</nav>
+<main id="main-content">
+<h1>Finding Duplicate Files</h1>
+<h2>Outline</h2>
+<ul>
+<li>Naïve O(N²) approach: compare every pair of files byte-by-byte</li>
+<li>Better O(N) approach: hash each file's content, group files by hash; only files in
+  the same group can be duplicates</li>
+<li>In Lean the pure core is: <code>group : List (String × ByteArray) → List (List String)</code>,
+  grouping filenames by their content hash</li>
+<li><code>ByteArray.hash</code> provides a fast structural hash (not cryptographic); for real use,
+  replace with SHA-256 via an FFI or IO call</li>
+<li>The IO wrapper reads files with <code>IO.FS.readBinFile</code> and calls the pure grouping logic</li>
+</ul>
+<h2>Code</h2>
+<div data-inc="code.lean"><span aria-label="Source: dup/code.lean" class="inc-path" role="img" tabindex="0" title="dup/code.lean">i</span><div class="codehilite"><pre class="" tabindex="0"><span></span><code><span class="c1">-- Pure core: group names by hash of associated data -----------------</span>
+
+<span class="kn">def</span><span class="w"> </span><span class="n">groupBy</span><span class="w"> </span><span class="o">{</span><span class="n">α</span><span class="w"> </span><span class="n">β</span><span class="w"> </span><span class="o">:</span><span class="w"> </span><span class="kt">Type</span><span class="o">}</span><span class="w"> </span><span class="o">[</span><span class="n">BEq</span><span class="w"> </span><span class="n">β</span><span class="o">]</span><span class="w"> </span><span class="o">[</span><span class="n">Hashable</span><span class="w"> </span><span class="n">β</span><span class="o">]</span>
+<span class="w">    </span><span class="o">(</span><span class="n">items</span><span class="w"> </span><span class="o">:</span><span class="w"> </span><span class="n">List</span><span class="w"> </span><span class="o">(</span><span class="n">String</span><span class="w"> </span><span class="bp">×</span><span class="w"> </span><span class="n">α</span><span class="o">))</span><span class="w"> </span><span class="o">(</span><span class="n">key</span><span class="w"> </span><span class="o">:</span><span class="w"> </span><span class="n">α</span><span class="w"> </span><span class="bp">→</span><span class="w"> </span><span class="n">β</span><span class="o">)</span><span class="w"> </span><span class="o">:</span><span class="w"> </span><span class="n">List</span><span class="w"> </span><span class="o">(</span><span class="n">List</span><span class="w"> </span><span class="n">String</span><span class="o">)</span><span class="w"> </span><span class="o">:=</span>
+<span class="w">  </span><span class="k">let</span><span class="w"> </span><span class="n">pairs</span><span class="w"> </span><span class="o">:=</span><span class="w"> </span><span class="n">items</span><span class="bp">.</span><span class="n">map</span><span class="w"> </span><span class="k">fun</span><span class="w"> </span><span class="o">(</span><span class="n">name</span><span class="o">,</span><span class="w"> </span><span class="n">content</span><span class="o">)</span><span class="w"> </span><span class="bp">=&gt;</span><span class="w"> </span><span class="o">(</span><span class="n">key</span><span class="w"> </span><span class="n">content</span><span class="o">,</span><span class="w"> </span><span class="n">name</span><span class="o">)</span>
+<span class="w">  </span><span class="k">let</span><span class="w"> </span><span class="n">allKeys</span><span class="w"> </span><span class="o">:=</span><span class="w"> </span><span class="n">pairs</span><span class="bp">.</span><span class="n">map</span><span class="w"> </span><span class="o">(</span><span class="bp">·.</span><span class="m">1</span><span class="o">)</span><span class="w"> </span><span class="bp">|&gt;.</span><span class="n">eraseDups</span>
+<span class="w">  </span><span class="n">allKeys</span><span class="bp">.</span><span class="n">filterMap</span><span class="w"> </span><span class="k">fun</span><span class="w"> </span><span class="n">k</span><span class="w"> </span><span class="bp">=&gt;</span>
+<span class="w">    </span><span class="k">let</span><span class="w"> </span><span class="n">group</span><span class="w"> </span><span class="o">:=</span><span class="w"> </span><span class="n">pairs</span><span class="bp">.</span><span class="n">filterMap</span><span class="w"> </span><span class="k">fun</span><span class="w"> </span><span class="o">(</span><span class="n">k'</span><span class="o">,</span><span class="w"> </span><span class="n">name</span><span class="o">)</span><span class="w"> </span><span class="bp">=&gt;</span>
+<span class="w">      </span><span class="k">if</span><span class="w"> </span><span class="n">k'</span><span class="w"> </span><span class="bp">==</span><span class="w"> </span><span class="n">k</span><span class="w"> </span><span class="k">then</span><span class="w"> </span><span class="n">some</span><span class="w"> </span><span class="n">name</span><span class="w"> </span><span class="k">else</span><span class="w"> </span><span class="n">none</span>
+<span class="w">    </span><span class="k">if</span><span class="w"> </span><span class="n">group</span><span class="bp">.</span><span class="n">length</span><span class="w"> </span><span class="bp">&gt;</span><span class="w"> </span><span class="mi">1</span><span class="w"> </span><span class="k">then</span><span class="w"> </span><span class="n">some</span><span class="w"> </span><span class="n">group</span><span class="w"> </span><span class="k">else</span><span class="w"> </span><span class="n">none</span>
+
+<span class="c1">-- Duplicate detection on in-memory byte arrays</span>
+<span class="kn">def</span><span class="w"> </span><span class="n">findDuplicates</span><span class="w"> </span><span class="o">(</span><span class="n">files</span><span class="w"> </span><span class="o">:</span><span class="w"> </span><span class="n">List</span><span class="w"> </span><span class="o">(</span><span class="n">String</span><span class="w"> </span><span class="bp">×</span><span class="w"> </span><span class="n">ByteArray</span><span class="o">))</span><span class="w"> </span><span class="o">:</span><span class="w"> </span><span class="n">List</span><span class="w"> </span><span class="o">(</span><span class="n">List</span><span class="w"> </span><span class="n">String</span><span class="o">)</span><span class="w"> </span><span class="o">:=</span>
+<span class="w">  </span><span class="n">groupBy</span><span class="w"> </span><span class="n">files</span><span class="w"> </span><span class="o">(</span><span class="k">fun</span><span class="w"> </span><span class="n">ba</span><span class="w"> </span><span class="bp">=&gt;</span><span class="w"> </span><span class="n">hash</span><span class="w"> </span><span class="n">ba</span><span class="o">)</span>
+
+<span class="c1">-- IO wrapper: read files from disk and find duplicates ---------------</span>
+
+<span class="kn">def</span><span class="w"> </span><span class="n">findDuplicateFiles</span><span class="w"> </span><span class="o">(</span><span class="n">paths</span><span class="w"> </span><span class="o">:</span><span class="w"> </span><span class="n">List</span><span class="w"> </span><span class="n">String</span><span class="o">)</span><span class="w"> </span><span class="o">:</span><span class="w"> </span><span class="n">IO</span><span class="w"> </span><span class="o">(</span><span class="n">List</span><span class="w"> </span><span class="o">(</span><span class="n">List</span><span class="w"> </span><span class="n">String</span><span class="o">))</span><span class="w"> </span><span class="o">:=</span><span class="w"> </span><span class="k">do</span>
+<span class="w">  </span><span class="k">let</span><span class="w"> </span><span class="n">contents</span><span class="w"> </span><span class="bp">←</span><span class="w"> </span><span class="n">paths</span><span class="bp">.</span><span class="n">mapM</span><span class="w"> </span><span class="k">fun</span><span class="w"> </span><span class="n">p</span><span class="w"> </span><span class="bp">=&gt;</span><span class="w"> </span><span class="k">do</span>
+<span class="w">    </span><span class="k">let</span><span class="w"> </span><span class="n">bytes</span><span class="w"> </span><span class="bp">←</span><span class="w"> </span><span class="n">IO</span><span class="bp">.</span><span class="n">FS</span><span class="bp">.</span><span class="n">readBinFile</span><span class="w"> </span><span class="n">p</span>
+<span class="w">    </span><span class="n">return</span><span class="w"> </span><span class="o">(</span><span class="n">p</span><span class="o">,</span><span class="w"> </span><span class="n">bytes</span><span class="o">)</span>
+<span class="w">  </span><span class="n">return</span><span class="w"> </span><span class="n">findDuplicates</span><span class="w"> </span><span class="n">contents</span>
+
+<span class="c1">-- Tests on in-memory data --------------------------------------------</span>
+
+<span class="kn">def</span><span class="w"> </span><span class="n">mkBytes</span><span class="w"> </span><span class="o">(</span><span class="n">s</span><span class="w"> </span><span class="o">:</span><span class="w"> </span><span class="n">String</span><span class="o">)</span><span class="w"> </span><span class="o">:</span><span class="w"> </span><span class="n">ByteArray</span><span class="w"> </span><span class="o">:=</span><span class="w"> </span><span class="n">s</span><span class="bp">.</span><span class="n">toUTF8</span>
+
+<span class="bp">#</span><span class="n">guard</span>
+<span class="w">  </span><span class="n">findDuplicates</span><span class="w"> </span><span class="o">[(</span><span class="s2">"a"</span><span class="o">,</span><span class="w"> </span><span class="n">mkBytes</span><span class="w"> </span><span class="s2">"hello"</span><span class="o">),</span><span class="w"> </span><span class="o">(</span><span class="s2">"b"</span><span class="o">,</span><span class="w"> </span><span class="n">mkBytes</span><span class="w"> </span><span class="s2">"hello"</span><span class="o">),</span><span class="w"> </span><span class="o">(</span><span class="s2">"c"</span><span class="o">,</span><span class="w"> </span><span class="n">mkBytes</span><span class="w"> </span><span class="s2">"world"</span><span class="o">)]</span>
+<span class="w">    </span><span class="bp">==</span><span class="w"> </span><span class="o">[[</span><span class="s2">"a"</span><span class="o">,</span><span class="w"> </span><span class="s2">"b"</span><span class="o">]]</span>
+
+<span class="bp">#</span><span class="n">guard</span>
+<span class="w">  </span><span class="n">findDuplicates</span><span class="w"> </span><span class="o">[(</span><span class="s2">"x"</span><span class="o">,</span><span class="w"> </span><span class="n">mkBytes</span><span class="w"> </span><span class="s2">"foo"</span><span class="o">),</span><span class="w"> </span><span class="o">(</span><span class="s2">"y"</span><span class="o">,</span><span class="w"> </span><span class="n">mkBytes</span><span class="w"> </span><span class="s2">"bar"</span><span class="o">)]</span>
+<span class="w">    </span><span class="bp">==</span><span class="w"> </span><span class="o">[]</span>
+
+<span class="c1">-- Complexity note:</span>
+<span class="c1">-- Naïve: O(N²) comparisons of full content</span>
+<span class="c1">-- Hash-based: O(N) hashes + O(G) per group where G is group size</span>
+<span class="c1">-- When all files differ: O(N) total  (no groups to compare further)</span>
+</code></pre></div>
+</div>
+</main>
+<footer aria-label="Page navigation">
+<div class="row">
+<div class="col-3 left">
+<span aria-hidden="true">⇐</span> <a href="../oop/">Objects and Classes</a>
+</div>
+<div class="col-6 center">
+<a href="../">sdxl</a>
+	  ©
+	  <a href="../#acknowledgments">the authors</a>
+</div>
+<div class="col-3 right">
+<a href="../glob/">Matching Patterns</a> <span aria-hidden="true">⇒</span>
+</div>
+</div>
+</footer>
+</body>
+</html>

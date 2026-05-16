@@ -1,0 +1,175 @@
+<!DOCTYPE html>
+
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>A Build Manager</title>
+<meta content="Software Design by Example in Lean" name="description"/>
+<link href="../_static/favicon.ico" rel="icon" type="image/x-icon"/>
+<link href="../_static/pygments.css" rel="stylesheet" type="text/css"/>
+<link href="../_static/chota.css" rel="stylesheet" type="text/css"/>
+<link href="../_static/mccole.css" rel="stylesheet" type="text/css"/>
+</head>
+<body>
+<a class="skip-link" href="#main-content">Skip to main content</a>
+<nav aria-label="Site navigation" class="nav">
+<div class="nav-left">
+<a class="brand" href="../">sdxl</a>
+<div class="dropdown">
+<button aria-controls="nav-lessons" aria-haspopup="true">Lessons</button>
+<ul class="dropdown-content" id="nav-lessons">
+<li><a href="../intro/">Introduction</a></li>
+<li><a href="../oop/">Objects and Classes</a></li>
+<li><a href="../dup/">Finding Duplicate Files</a></li>
+<li><a href="../glob/">Matching Patterns</a></li>
+<li><a href="../parse/">Parsing Text</a></li>
+<li><a href="../test/">Running Tests</a></li>
+<li><a href="../interp/">An Interpreter</a></li>
+<li><a href="../func/">Functions and Closures</a></li>
+<li><a href="../archive/">A File Archiver</a></li>
+<li><a href="../check/">An HTML Validator</a></li>
+<li><a href="../template/">A Template Expander</a></li>
+<li><a href="../lint/">A Code Linter</a></li>
+<li><a href="../layout/">Page Layout</a></li>
+<li><a href="../binary/">Binary Data</a></li>
+<li><a href="../db/">A Database</a></li>
+<li><a class="active" href="../build/">A Build Manager</a></li>
+<li><a href="../pack/">A Package Manager</a></li>
+<li><a href="../vm/">A Virtual Machine</a></li>
+<li><a href="../docgen/">Generating Documentation</a></li>
+<li><a href="../finale/">Conclusion</a></li>
+</ul>
+</div>
+<div class="dropdown">
+<button aria-controls="nav-appendices" aria-haspopup="true">Appendices</button>
+<ul class="dropdown-content" id="nav-appendices">
+<li><a href="../license/">License</a></li>
+<li><a href="../conduct/">Code of Conduct</a></li>
+<li><a href="../contributing/">Contributing</a></li>
+<li><a href="../bibliography/">Bibliography</a></li>
+<li><a href="../glossary/">Glossary</a></li>
+</ul>
+</div>
+<a href="https://github.com/gvwilson/webllm">Repository</a>
+</div>
+</nav>
+<main id="main-content">
+<h1>A Build Manager</h1>
+<h2>Outline</h2>
+<ul>
+<li>Represent build rules as <code>Rule</code>: target name, list of dependencies, recipe string</li>
+<li>Build the dependency graph as an adjacency list (<code>List (String × List String)</code>)</li>
+<li>Detect cycles with DFS (a node on the current path means a cycle)</li>
+<li>Topological sort via post-order DFS: add a node after all its dependencies</li>
+<li>Execute rules in topological order, skipping targets whose timestamps are fresh</li>
+<li>For this pure implementation, "timestamps" are modeled as a <code>Nat</code> lookup table</li>
+</ul>
+<h2>Code</h2>
+<div data-inc="code.lean"><span aria-label="Source: build/code.lean" class="inc-path" role="img" tabindex="0" title="build/code.lean">i</span><div class="codehilite"><pre class="" tabindex="0"><span></span><code><span class="kn">import</span><span class="w"> </span><span class="n">Std</span><span class="bp">.</span><span class="n">Data</span><span class="bp">.</span><span class="n">HashMap</span>
+
+<span class="c1">-- A build rule: target, dependencies, recipe</span>
+<span class="kn">structure</span><span class="w"> </span><span class="n">Rule</span><span class="w"> </span><span class="kn">where</span>
+<span class="w">  </span><span class="n">target</span><span class="w"> </span><span class="o">:</span><span class="w"> </span><span class="n">String</span>
+<span class="w">  </span><span class="n">deps</span><span class="w">   </span><span class="o">:</span><span class="w"> </span><span class="n">List</span><span class="w"> </span><span class="n">String</span>
+<span class="w">  </span><span class="n">recipe</span><span class="w"> </span><span class="o">:</span><span class="w"> </span><span class="n">String</span>
+<span class="w">  </span><span class="n">deriving</span><span class="w"> </span><span class="n">Repr</span>
+
+<span class="c1">-- Dependency graph as adjacency list</span>
+<span class="kn">abbrev</span><span class="w"> </span><span class="n">Graph</span><span class="w"> </span><span class="o">:=</span><span class="w"> </span><span class="n">List</span><span class="w"> </span><span class="o">(</span><span class="n">String</span><span class="w"> </span><span class="bp">×</span><span class="w"> </span><span class="n">List</span><span class="w"> </span><span class="n">String</span><span class="o">)</span>
+
+<span class="kn">def</span><span class="w"> </span><span class="n">rulesGraph</span><span class="w"> </span><span class="o">(</span><span class="n">rules</span><span class="w"> </span><span class="o">:</span><span class="w"> </span><span class="n">List</span><span class="w"> </span><span class="n">Rule</span><span class="o">)</span><span class="w"> </span><span class="o">:</span><span class="w"> </span><span class="n">Graph</span><span class="w"> </span><span class="o">:=</span>
+<span class="w">  </span><span class="n">rules</span><span class="bp">.</span><span class="n">map</span><span class="w"> </span><span class="k">fun</span><span class="w"> </span><span class="n">r</span><span class="w"> </span><span class="bp">=&gt;</span><span class="w"> </span><span class="o">(</span><span class="n">r</span><span class="bp">.</span><span class="n">target</span><span class="o">,</span><span class="w"> </span><span class="n">r</span><span class="bp">.</span><span class="n">deps</span><span class="o">)</span>
+
+<span class="c1">-- Topological sort (post-order DFS) -----------------------------------</span>
+
+<span class="kn">private</span><span class="w"> </span><span class="kn">def</span><span class="w"> </span><span class="n">topoVisit</span><span class="w"> </span><span class="o">(</span><span class="n">graph</span><span class="w"> </span><span class="o">:</span><span class="w"> </span><span class="n">Graph</span><span class="o">)</span><span class="w"> </span><span class="o">(</span><span class="n">node</span><span class="w"> </span><span class="o">:</span><span class="w"> </span><span class="n">String</span><span class="o">)</span>
+<span class="w">    </span><span class="o">(</span><span class="n">visited</span><span class="w"> </span><span class="n">onStack</span><span class="w"> </span><span class="o">:</span><span class="w"> </span><span class="n">List</span><span class="w"> </span><span class="n">String</span><span class="o">)</span><span class="w"> </span><span class="o">:</span>
+<span class="w">    </span><span class="n">Except</span><span class="w"> </span><span class="n">String</span><span class="w"> </span><span class="o">(</span><span class="n">List</span><span class="w"> </span><span class="n">String</span><span class="w"> </span><span class="bp">×</span><span class="w"> </span><span class="n">List</span><span class="w"> </span><span class="n">String</span><span class="o">)</span><span class="w"> </span><span class="o">:=</span><span class="w"> </span><span class="k">do</span>
+<span class="w">  </span><span class="k">if</span><span class="w"> </span><span class="n">onStack</span><span class="bp">.</span><span class="n">contains</span><span class="w"> </span><span class="n">node</span><span class="w"> </span><span class="k">then</span>
+<span class="w">    </span><span class="bp">.</span><span class="n">error</span><span class="w"> </span><span class="n">s!</span><span class="s2">"cycle detected at {node}"</span>
+<span class="w">  </span><span class="k">if</span><span class="w"> </span><span class="n">visited</span><span class="bp">.</span><span class="n">contains</span><span class="w"> </span><span class="n">node</span><span class="w"> </span><span class="k">then</span>
+<span class="w">    </span><span class="n">return</span><span class="w"> </span><span class="o">([],</span><span class="w"> </span><span class="n">visited</span><span class="o">)</span>
+<span class="w">  </span><span class="k">let</span><span class="w"> </span><span class="n">deps</span><span class="w"> </span><span class="o">:=</span><span class="w"> </span><span class="o">(</span><span class="n">graph</span><span class="bp">.</span><span class="n">find?</span><span class="w"> </span><span class="o">(</span><span class="bp">·.</span><span class="m">1</span><span class="w"> </span><span class="bp">==</span><span class="w"> </span><span class="n">node</span><span class="o">))</span><span class="bp">.</span><span class="n">map</span><span class="w"> </span><span class="o">(</span><span class="bp">·.</span><span class="m">2</span><span class="o">)</span><span class="w"> </span><span class="bp">|&gt;.</span><span class="n">getD</span><span class="w"> </span><span class="o">[]</span>
+<span class="w">  </span><span class="k">let</span><span class="w"> </span><span class="n">mut</span><span class="w"> </span><span class="n">order</span><span class="w">   </span><span class="o">:</span><span class="w"> </span><span class="n">List</span><span class="w"> </span><span class="n">String</span><span class="w"> </span><span class="o">:=</span><span class="w"> </span><span class="o">[]</span>
+<span class="w">  </span><span class="k">let</span><span class="w"> </span><span class="n">mut</span><span class="w"> </span><span class="n">visited</span><span class="w"> </span><span class="o">:=</span><span class="w"> </span><span class="n">visited</span>
+<span class="w">  </span><span class="n">for</span><span class="w"> </span><span class="n">dep</span><span class="w"> </span><span class="k">in</span><span class="w"> </span><span class="n">deps</span><span class="w"> </span><span class="k">do</span>
+<span class="w">    </span><span class="k">let</span><span class="w"> </span><span class="o">(</span><span class="n">subOrder</span><span class="o">,</span><span class="w"> </span><span class="n">vis'</span><span class="o">)</span><span class="w"> </span><span class="bp">←</span>
+<span class="w">      </span><span class="n">topoVisit</span><span class="w"> </span><span class="n">graph</span><span class="w"> </span><span class="n">dep</span><span class="w"> </span><span class="n">vis'</span><span class="w"> </span><span class="o">(</span><span class="n">node</span><span class="w"> </span><span class="bp">::</span><span class="w"> </span><span class="n">onStack</span><span class="o">)</span><span class="w">  </span><span class="c1">-- NB: `vis'` updated in loop</span>
+<span class="w">    </span><span class="n">order</span><span class="w">   </span><span class="o">:=</span><span class="w"> </span><span class="n">order</span><span class="w"> </span><span class="bp">++</span><span class="w"> </span><span class="n">subOrder</span>
+<span class="w">    </span><span class="n">visited</span><span class="w"> </span><span class="o">:=</span><span class="w"> </span><span class="n">vis'</span>
+<span class="w">  </span><span class="n">return</span><span class="w"> </span><span class="o">(</span><span class="n">order</span><span class="w"> </span><span class="bp">++</span><span class="w"> </span><span class="o">[</span><span class="n">node</span><span class="o">],</span><span class="w"> </span><span class="n">node</span><span class="w"> </span><span class="bp">::</span><span class="w"> </span><span class="n">visited</span><span class="o">)</span>
+<span class="n">termination_by</span><span class="w"> </span><span class="o">(</span><span class="n">graph</span><span class="bp">.</span><span class="n">length</span><span class="w"> </span><span class="bp">-</span><span class="w"> </span><span class="n">visited</span><span class="bp">.</span><span class="n">length</span><span class="o">)</span><span class="w">   </span><span class="c1">-- not provable; use partial</span>
+
+<span class="c1">-- Simpler non-cycle-detecting topological sort for illustration</span>
+<span class="n">partial</span><span class="w"> </span><span class="kn">def</span><span class="w"> </span><span class="n">topoSort</span><span class="w"> </span><span class="o">(</span><span class="n">graph</span><span class="w"> </span><span class="o">:</span><span class="w"> </span><span class="n">Graph</span><span class="o">)</span><span class="w"> </span><span class="o">:</span><span class="w"> </span><span class="n">List</span><span class="w"> </span><span class="n">String</span><span class="w"> </span><span class="o">:=</span>
+<span class="w">  </span><span class="k">let</span><span class="w"> </span><span class="n">nodes</span><span class="w"> </span><span class="o">:=</span><span class="w"> </span><span class="n">graph</span><span class="bp">.</span><span class="n">map</span><span class="w"> </span><span class="o">(</span><span class="bp">·.</span><span class="m">1</span><span class="o">)</span>
+<span class="w">  </span><span class="k">let</span><span class="w"> </span><span class="o">(</span><span class="n">order</span><span class="o">,</span><span class="w"> </span><span class="bp">_</span><span class="o">)</span><span class="w"> </span><span class="o">:=</span><span class="w"> </span><span class="n">nodes</span><span class="bp">.</span><span class="n">foldl</span><span class="w"> </span><span class="o">(</span><span class="n">init</span><span class="w"> </span><span class="o">:=</span><span class="w"> </span><span class="o">([],</span><span class="w"> </span><span class="o">[]))</span><span class="w"> </span><span class="k">fun</span><span class="w"> </span><span class="o">(</span><span class="n">order</span><span class="o">,</span><span class="w"> </span><span class="n">visited</span><span class="o">)</span><span class="w"> </span><span class="n">n</span><span class="w"> </span><span class="bp">=&gt;</span>
+<span class="w">    </span><span class="n">visit</span><span class="w"> </span><span class="n">n</span><span class="w"> </span><span class="n">visited</span><span class="w"> </span><span class="n">order</span>
+<span class="w">  </span><span class="n">order</span>
+<span class="kn">where</span>
+<span class="w">  </span><span class="n">visit</span><span class="w"> </span><span class="o">(</span><span class="n">n</span><span class="w"> </span><span class="o">:</span><span class="w"> </span><span class="n">String</span><span class="o">)</span><span class="w"> </span><span class="o">(</span><span class="n">visited</span><span class="w"> </span><span class="n">order</span><span class="w"> </span><span class="o">:</span><span class="w"> </span><span class="n">List</span><span class="w"> </span><span class="n">String</span><span class="o">)</span><span class="w"> </span><span class="o">:</span>
+<span class="w">      </span><span class="n">List</span><span class="w"> </span><span class="n">String</span><span class="w"> </span><span class="bp">×</span><span class="w"> </span><span class="n">List</span><span class="w"> </span><span class="n">String</span><span class="w"> </span><span class="o">:=</span>
+<span class="w">    </span><span class="k">if</span><span class="w"> </span><span class="n">visited</span><span class="bp">.</span><span class="n">contains</span><span class="w"> </span><span class="n">n</span><span class="w"> </span><span class="k">then</span><span class="w"> </span><span class="o">(</span><span class="n">order</span><span class="o">,</span><span class="w"> </span><span class="n">visited</span><span class="o">)</span>
+<span class="w">    </span><span class="k">else</span>
+<span class="w">      </span><span class="k">let</span><span class="w"> </span><span class="n">deps</span><span class="w"> </span><span class="o">:=</span><span class="w"> </span><span class="o">(</span><span class="n">graph</span><span class="bp">.</span><span class="n">find?</span><span class="w"> </span><span class="o">(</span><span class="bp">·.</span><span class="m">1</span><span class="w"> </span><span class="bp">==</span><span class="w"> </span><span class="n">n</span><span class="o">))</span><span class="bp">.</span><span class="n">map</span><span class="w"> </span><span class="o">(</span><span class="bp">·.</span><span class="m">2</span><span class="o">)</span><span class="w"> </span><span class="bp">|&gt;.</span><span class="n">getD</span><span class="w"> </span><span class="o">[]</span>
+<span class="w">      </span><span class="k">let</span><span class="w"> </span><span class="o">(</span><span class="n">order</span><span class="o">,</span><span class="w"> </span><span class="n">visited</span><span class="o">)</span><span class="w"> </span><span class="o">:=</span>
+<span class="w">        </span><span class="n">deps</span><span class="bp">.</span><span class="n">foldl</span><span class="w"> </span><span class="o">(</span><span class="n">init</span><span class="w"> </span><span class="o">:=</span><span class="w"> </span><span class="o">(</span><span class="n">order</span><span class="o">,</span><span class="w"> </span><span class="n">n</span><span class="w"> </span><span class="bp">::</span><span class="w"> </span><span class="n">visited</span><span class="o">))</span><span class="w"> </span><span class="k">fun</span><span class="w"> </span><span class="o">(</span><span class="n">o</span><span class="o">,</span><span class="w"> </span><span class="n">v</span><span class="o">)</span><span class="w"> </span><span class="n">d</span><span class="w"> </span><span class="bp">=&gt;</span>
+<span class="w">          </span><span class="n">visit</span><span class="w"> </span><span class="n">d</span><span class="w"> </span><span class="n">v</span><span class="w"> </span><span class="n">o</span>
+<span class="w">      </span><span class="o">(</span><span class="n">order</span><span class="w"> </span><span class="bp">++</span><span class="w"> </span><span class="o">[</span><span class="n">n</span><span class="o">],</span><span class="w"> </span><span class="n">visited</span><span class="o">)</span>
+
+<span class="c1">-- Staleness check: a target is stale if any dep is newer than it</span>
+<span class="kn">abbrev</span><span class="w"> </span><span class="n">Timestamps</span><span class="w"> </span><span class="bp">=</span><span class="w"> </span><span class="n">List</span><span class="w"> </span><span class="o">(</span><span class="n">String</span><span class="w"> </span><span class="bp">×</span><span class="w"> </span><span class="n">Nat</span><span class="o">)</span>
+
+<span class="kn">def</span><span class="w"> </span><span class="n">isStale</span><span class="w"> </span><span class="o">(</span><span class="n">stamps</span><span class="w"> </span><span class="o">:</span><span class="w"> </span><span class="n">Timestamps</span><span class="o">)</span><span class="w"> </span><span class="o">(</span><span class="n">target</span><span class="w"> </span><span class="o">:</span><span class="w"> </span><span class="n">String</span><span class="o">)</span><span class="w"> </span><span class="o">(</span><span class="n">deps</span><span class="w"> </span><span class="o">:</span><span class="w"> </span><span class="n">List</span><span class="w"> </span><span class="n">String</span><span class="o">)</span><span class="w"> </span><span class="o">:</span><span class="w"> </span><span class="n">Bool</span><span class="w"> </span><span class="o">:=</span>
+<span class="w">  </span><span class="k">let</span><span class="w"> </span><span class="n">ttime</span><span class="w"> </span><span class="o">:=</span><span class="w"> </span><span class="o">(</span><span class="n">stamps</span><span class="bp">.</span><span class="n">find?</span><span class="w"> </span><span class="o">(</span><span class="bp">·.</span><span class="m">1</span><span class="w"> </span><span class="bp">==</span><span class="w"> </span><span class="n">target</span><span class="o">))</span><span class="bp">.</span><span class="n">map</span><span class="w"> </span><span class="o">(</span><span class="bp">·.</span><span class="m">2</span><span class="o">)</span><span class="w"> </span><span class="bp">|&gt;.</span><span class="n">getD</span><span class="w"> </span><span class="mi">0</span>
+<span class="w">  </span><span class="n">deps</span><span class="bp">.</span><span class="n">any</span><span class="w"> </span><span class="k">fun</span><span class="w"> </span><span class="n">d</span><span class="w"> </span><span class="bp">=&gt;</span>
+<span class="w">    </span><span class="k">let</span><span class="w"> </span><span class="n">dtime</span><span class="w"> </span><span class="o">:=</span><span class="w"> </span><span class="o">(</span><span class="n">stamps</span><span class="bp">.</span><span class="n">find?</span><span class="w"> </span><span class="o">(</span><span class="bp">·.</span><span class="m">1</span><span class="w"> </span><span class="bp">==</span><span class="w"> </span><span class="n">d</span><span class="o">))</span><span class="bp">.</span><span class="n">map</span><span class="w"> </span><span class="o">(</span><span class="bp">·.</span><span class="m">2</span><span class="o">)</span><span class="w"> </span><span class="bp">|&gt;.</span><span class="n">getD</span><span class="w"> </span><span class="mi">0</span>
+<span class="w">    </span><span class="n">dtime</span><span class="w"> </span><span class="bp">&gt;</span><span class="w"> </span><span class="n">ttime</span>
+
+<span class="c1">-- Execute build: return list of recipes that would run</span>
+<span class="kn">def</span><span class="w"> </span><span class="n">executeBuild</span><span class="w"> </span><span class="o">(</span><span class="n">rules</span><span class="w"> </span><span class="o">:</span><span class="w"> </span><span class="n">List</span><span class="w"> </span><span class="n">Rule</span><span class="o">)</span><span class="w"> </span><span class="o">(</span><span class="n">stamps</span><span class="w"> </span><span class="o">:</span><span class="w"> </span><span class="n">Timestamps</span><span class="o">)</span><span class="w"> </span><span class="o">:</span><span class="w"> </span><span class="n">List</span><span class="w"> </span><span class="n">String</span><span class="w"> </span><span class="o">:=</span>
+<span class="w">  </span><span class="k">let</span><span class="w"> </span><span class="n">graph</span><span class="w"> </span><span class="o">:=</span><span class="w"> </span><span class="n">rulesGraph</span><span class="w"> </span><span class="n">rules</span>
+<span class="w">  </span><span class="k">let</span><span class="w"> </span><span class="n">order</span><span class="w"> </span><span class="o">:=</span><span class="w"> </span><span class="n">topoSort</span><span class="w"> </span><span class="n">graph</span>
+<span class="w">  </span><span class="n">order</span><span class="bp">.</span><span class="n">filterMap</span><span class="w"> </span><span class="k">fun</span><span class="w"> </span><span class="n">target</span><span class="w"> </span><span class="bp">=&gt;</span>
+<span class="w">    </span><span class="n">rules</span><span class="bp">.</span><span class="n">find?</span><span class="w"> </span><span class="o">(</span><span class="bp">·.</span><span class="n">target</span><span class="w"> </span><span class="bp">==</span><span class="w"> </span><span class="n">target</span><span class="o">)</span><span class="w"> </span><span class="bp">|&gt;.</span><span class="n">bind</span><span class="w"> </span><span class="k">fun</span><span class="w"> </span><span class="n">rule</span><span class="w"> </span><span class="bp">=&gt;</span>
+<span class="w">      </span><span class="k">if</span><span class="w"> </span><span class="n">isStale</span><span class="w"> </span><span class="n">stamps</span><span class="w"> </span><span class="n">target</span><span class="w"> </span><span class="n">rule</span><span class="bp">.</span><span class="n">deps</span><span class="w"> </span><span class="k">then</span><span class="w"> </span><span class="n">some</span><span class="w"> </span><span class="n">rule</span><span class="bp">.</span><span class="n">recipe</span><span class="w"> </span><span class="k">else</span><span class="w"> </span><span class="n">none</span>
+
+<span class="c1">-- Tests ----------------------------------------------------------------</span>
+
+<span class="kn">def</span><span class="w"> </span><span class="n">exRules</span><span class="w"> </span><span class="o">:</span><span class="w"> </span><span class="n">List</span><span class="w"> </span><span class="n">Rule</span><span class="w"> </span><span class="o">:=</span><span class="w"> </span><span class="o">[</span>
+<span class="w">  </span><span class="o">{</span><span class="w"> </span><span class="n">target</span><span class="w"> </span><span class="o">:=</span><span class="w"> </span><span class="s2">"output"</span><span class="o">,</span><span class="w"> </span><span class="n">deps</span><span class="w"> </span><span class="o">:=</span><span class="w"> </span><span class="o">[</span><span class="s2">"processed"</span><span class="o">],</span><span class="w"> </span><span class="n">recipe</span><span class="w"> </span><span class="o">:=</span><span class="w"> </span><span class="s2">"run analysis"</span><span class="w"> </span><span class="o">},</span>
+<span class="w">  </span><span class="o">{</span><span class="w"> </span><span class="n">target</span><span class="w"> </span><span class="o">:=</span><span class="w"> </span><span class="s2">"processed"</span><span class="o">,</span><span class="w"> </span><span class="n">deps</span><span class="w"> </span><span class="o">:=</span><span class="w"> </span><span class="o">[</span><span class="s2">"raw"</span><span class="o">],</span><span class="w">    </span><span class="n">recipe</span><span class="w"> </span><span class="o">:=</span><span class="w"> </span><span class="s2">"run normalize"</span><span class="w"> </span><span class="o">},</span>
+<span class="w">  </span><span class="o">{</span><span class="w"> </span><span class="n">target</span><span class="w"> </span><span class="o">:=</span><span class="w"> </span><span class="s2">"raw"</span><span class="o">,</span><span class="w"> </span><span class="n">deps</span><span class="w"> </span><span class="o">:=</span><span class="w"> </span><span class="o">[],</span><span class="w">               </span><span class="n">recipe</span><span class="w"> </span><span class="o">:=</span><span class="w"> </span><span class="s2">"fetch data"</span><span class="w"> </span><span class="o">}</span>
+<span class="o">]</span>
+
+<span class="c1">-- Topological order should put "raw" before "processed" before "output"</span>
+<span class="bp">#</span><span class="n">eval</span><span class="w"> </span><span class="n">topoSort</span><span class="w"> </span><span class="o">(</span><span class="n">rulesGraph</span><span class="w"> </span><span class="n">exRules</span><span class="o">)</span>
+<span class="c1">-- ["raw", "processed", "output"]</span>
+
+<span class="c1">-- Everything stale (no stamps) → all recipes run</span>
+<span class="bp">#</span><span class="n">eval</span><span class="w"> </span><span class="n">executeBuild</span><span class="w"> </span><span class="n">exRules</span><span class="w"> </span><span class="o">[]</span>
+<span class="c1">-- ["fetch data", "run normalize", "run analysis"]</span>
+
+<span class="c1">-- raw already up to date (stamp=5), others at 0 → normalize and analysis still run</span>
+<span class="bp">#</span><span class="n">eval</span><span class="w"> </span><span class="n">executeBuild</span><span class="w"> </span><span class="n">exRules</span><span class="w"> </span><span class="o">[(</span><span class="s2">"raw"</span><span class="o">,</span><span class="w"> </span><span class="mi">5</span><span class="o">)]</span>
+</code></pre></div>
+</div>
+</main>
+<footer aria-label="Page navigation">
+<div class="row">
+<div class="col-3 left">
+<span aria-hidden="true">⇐</span> <a href="../db/">A Database</a>
+</div>
+<div class="col-6 center">
+<a href="../">sdxl</a>
+	  ©
+	  <a href="../#acknowledgments">the authors</a>
+</div>
+<div class="col-3 right">
+<a href="../pack/">A Package Manager</a> <span aria-hidden="true">⇒</span>
+</div>
+</div>
+</footer>
+</body>
+</html>

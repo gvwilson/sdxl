@@ -1,0 +1,171 @@
+<!DOCTYPE html>
+
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Parsing Text</title>
+<meta content="Software Design by Example in Lean" name="description"/>
+<link href="../_static/favicon.ico" rel="icon" type="image/x-icon"/>
+<link href="../_static/pygments.css" rel="stylesheet" type="text/css"/>
+<link href="../_static/chota.css" rel="stylesheet" type="text/css"/>
+<link href="../_static/mccole.css" rel="stylesheet" type="text/css"/>
+</head>
+<body>
+<a class="skip-link" href="#main-content">Skip to main content</a>
+<nav aria-label="Site navigation" class="nav">
+<div class="nav-left">
+<a class="brand" href="../">sdxl</a>
+<div class="dropdown">
+<button aria-controls="nav-lessons" aria-haspopup="true">Lessons</button>
+<ul class="dropdown-content" id="nav-lessons">
+<li><a href="../intro/">Introduction</a></li>
+<li><a href="../oop/">Objects and Classes</a></li>
+<li><a href="../dup/">Finding Duplicate Files</a></li>
+<li><a href="../glob/">Matching Patterns</a></li>
+<li><a class="active" href="../parse/">Parsing Text</a></li>
+<li><a href="../test/">Running Tests</a></li>
+<li><a href="../interp/">An Interpreter</a></li>
+<li><a href="../func/">Functions and Closures</a></li>
+<li><a href="../archive/">A File Archiver</a></li>
+<li><a href="../check/">An HTML Validator</a></li>
+<li><a href="../template/">A Template Expander</a></li>
+<li><a href="../lint/">A Code Linter</a></li>
+<li><a href="../layout/">Page Layout</a></li>
+<li><a href="../binary/">Binary Data</a></li>
+<li><a href="../db/">A Database</a></li>
+<li><a href="../build/">A Build Manager</a></li>
+<li><a href="../pack/">A Package Manager</a></li>
+<li><a href="../vm/">A Virtual Machine</a></li>
+<li><a href="../docgen/">Generating Documentation</a></li>
+<li><a href="../finale/">Conclusion</a></li>
+</ul>
+</div>
+<div class="dropdown">
+<button aria-controls="nav-appendices" aria-haspopup="true">Appendices</button>
+<ul class="dropdown-content" id="nav-appendices">
+<li><a href="../license/">License</a></li>
+<li><a href="../conduct/">Code of Conduct</a></li>
+<li><a href="../contributing/">Contributing</a></li>
+<li><a href="../bibliography/">Bibliography</a></li>
+<li><a href="../glossary/">Glossary</a></li>
+</ul>
+</div>
+<a href="https://github.com/gvwilson/webllm">Repository</a>
+</div>
+</nav>
+<main id="main-content">
+<h1>Parsing Text</h1>
+<h2>Outline</h2>
+<ul>
+<li>Stage 1 (tokenizer): scan a glob string character by character into a <code>Token</code> list;
+  special chars <code>*</code>, <code>{</code>, <code>}</code>, <code>,</code> each become their own token; runs of other chars
+  become a single <code>Lit</code> token</li>
+<li>Stage 2 (parser): consume tokens left-to-right, producing the <code>Pat</code> tree from the
+  <code>glob</code> lesson; <code>{a,b}</code> becomes <code>Alt [Lit "a", Lit "b"]</code>; sequences are folded into
+  <code>Seq</code> nodes</li>
+<li>Parser returns <code>(Pat, remaining tokens)</code> so each sub-parser is composable</li>
+</ul>
+<h2>Code</h2>
+<div data-inc="code.lean"><span aria-label="Source: parse/code.lean" class="inc-path" role="img" tabindex="0" title="parse/code.lean">i</span><div class="codehilite"><pre class="" tabindex="0"><span></span><code><span class="c1">-- Tokens produced by the tokenizer</span>
+<span class="kn">inductive</span><span class="w"> </span><span class="n">Token</span><span class="w"> </span><span class="kn">where</span>
+<span class="w">  </span><span class="bp">|</span><span class="w"> </span><span class="n">Lit</span><span class="w">    </span><span class="o">:</span><span class="w"> </span><span class="n">String</span><span class="w"> </span><span class="bp">→</span><span class="w"> </span><span class="n">Token</span>
+<span class="w">  </span><span class="bp">|</span><span class="w"> </span><span class="n">Star</span><span class="w">   </span><span class="o">:</span><span class="w"> </span><span class="n">Token</span>
+<span class="w">  </span><span class="bp">|</span><span class="w"> </span><span class="n">LBrace</span><span class="w"> </span><span class="o">:</span><span class="w"> </span><span class="n">Token</span>
+<span class="w">  </span><span class="bp">|</span><span class="w"> </span><span class="n">RBrace</span><span class="w"> </span><span class="o">:</span><span class="w"> </span><span class="n">Token</span>
+<span class="w">  </span><span class="bp">|</span><span class="w"> </span><span class="n">Comma</span><span class="w">  </span><span class="o">:</span><span class="w"> </span><span class="n">Token</span>
+<span class="w">  </span><span class="n">deriving</span><span class="w"> </span><span class="n">Repr</span><span class="o">,</span><span class="w"> </span><span class="n">BEq</span>
+
+<span class="c1">-- Patterns (same as glob lesson)</span>
+<span class="kn">inductive</span><span class="w"> </span><span class="n">Pat</span><span class="w"> </span><span class="kn">where</span>
+<span class="w">  </span><span class="bp">|</span><span class="w"> </span><span class="n">Lit</span><span class="w">  </span><span class="o">:</span><span class="w"> </span><span class="n">String</span><span class="w"> </span><span class="bp">→</span><span class="w"> </span><span class="n">Pat</span>
+<span class="w">  </span><span class="bp">|</span><span class="w"> </span><span class="n">Wild</span><span class="w"> </span><span class="o">:</span><span class="w"> </span><span class="n">Pat</span>
+<span class="w">  </span><span class="bp">|</span><span class="w"> </span><span class="n">Seq</span><span class="w">  </span><span class="o">:</span><span class="w"> </span><span class="n">Pat</span><span class="w"> </span><span class="bp">→</span><span class="w"> </span><span class="n">Pat</span><span class="w"> </span><span class="bp">→</span><span class="w"> </span><span class="n">Pat</span>
+<span class="w">  </span><span class="bp">|</span><span class="w"> </span><span class="n">Alt</span><span class="w">  </span><span class="o">:</span><span class="w"> </span><span class="n">List</span><span class="w"> </span><span class="n">Pat</span><span class="w"> </span><span class="bp">→</span><span class="w"> </span><span class="n">Pat</span>
+<span class="w">  </span><span class="n">deriving</span><span class="w"> </span><span class="n">Repr</span>
+
+<span class="c1">-- Tokenizer ------------------------------------------------------------</span>
+
+<span class="kn">private</span><span class="w"> </span><span class="kn">def</span><span class="w"> </span><span class="n">flushLit</span><span class="w"> </span><span class="o">(</span><span class="n">cur</span><span class="w"> </span><span class="o">:</span><span class="w"> </span><span class="n">String</span><span class="o">)</span><span class="w"> </span><span class="o">(</span><span class="n">acc</span><span class="w"> </span><span class="o">:</span><span class="w"> </span><span class="n">List</span><span class="w"> </span><span class="n">Token</span><span class="o">)</span><span class="w"> </span><span class="o">:</span><span class="w"> </span><span class="n">List</span><span class="w"> </span><span class="n">Token</span><span class="w"> </span><span class="o">:=</span>
+<span class="w">  </span><span class="k">if</span><span class="w"> </span><span class="n">cur</span><span class="bp">.</span><span class="n">isEmpty</span><span class="w"> </span><span class="k">then</span><span class="w"> </span><span class="n">acc</span><span class="w"> </span><span class="k">else</span><span class="w"> </span><span class="n">acc</span><span class="w"> </span><span class="bp">++</span><span class="w"> </span><span class="o">[</span><span class="n">Token</span><span class="bp">.</span><span class="n">Lit</span><span class="w"> </span><span class="n">cur</span><span class="o">]</span>
+
+<span class="kn">def</span><span class="w"> </span><span class="n">tokenize</span><span class="w"> </span><span class="o">(</span><span class="n">s</span><span class="w"> </span><span class="o">:</span><span class="w"> </span><span class="n">String</span><span class="o">)</span><span class="w"> </span><span class="o">:</span><span class="w"> </span><span class="n">List</span><span class="w"> </span><span class="n">Token</span><span class="w"> </span><span class="o">:=</span>
+<span class="w">  </span><span class="k">let</span><span class="w"> </span><span class="o">(</span><span class="n">toks</span><span class="o">,</span><span class="w"> </span><span class="n">cur</span><span class="o">)</span><span class="w"> </span><span class="o">:=</span><span class="w"> </span><span class="n">s</span><span class="bp">.</span><span class="n">toList</span><span class="bp">.</span><span class="n">foldl</span><span class="w"> </span><span class="o">(</span><span class="n">init</span><span class="w"> </span><span class="o">:=</span><span class="w"> </span><span class="o">([],</span><span class="w"> </span><span class="s2">""</span><span class="o">))</span><span class="w"> </span><span class="k">fun</span><span class="w"> </span><span class="o">(</span><span class="n">acc</span><span class="o">,</span><span class="w"> </span><span class="n">cur</span><span class="o">)</span><span class="w"> </span><span class="n">c</span><span class="w"> </span><span class="bp">=&gt;</span>
+<span class="w">    </span><span class="k">match</span><span class="w"> </span><span class="n">c</span><span class="w"> </span><span class="k">with</span>
+<span class="w">    </span><span class="bp">|</span><span class="w"> </span><span class="bp">'*'</span><span class="w"> </span><span class="bp">=&gt;</span><span class="w"> </span><span class="o">(</span><span class="n">flushLit</span><span class="w"> </span><span class="n">cur</span><span class="w"> </span><span class="n">acc</span><span class="w"> </span><span class="bp">++</span><span class="w"> </span><span class="o">[</span><span class="n">Token</span><span class="bp">.</span><span class="n">Star</span><span class="o">],</span><span class="w">   </span><span class="s2">""</span><span class="o">)</span>
+<span class="w">    </span><span class="bp">|</span><span class="w"> </span><span class="bp">'</span><span class="o">{</span><span class="bp">'</span><span class="w"> </span><span class="bp">=&gt;</span><span class="w"> </span><span class="o">(</span><span class="n">flushLit</span><span class="w"> </span><span class="n">cur</span><span class="w"> </span><span class="n">acc</span><span class="w"> </span><span class="bp">++</span><span class="w"> </span><span class="o">[</span><span class="n">Token</span><span class="bp">.</span><span class="n">LBrace</span><span class="o">],</span><span class="w"> </span><span class="s2">""</span><span class="o">)</span>
+<span class="w">    </span><span class="bp">|</span><span class="w"> </span><span class="bp">'</span><span class="o">}</span><span class="bp">'</span><span class="w"> </span><span class="bp">=&gt;</span><span class="w"> </span><span class="o">(</span><span class="n">flushLit</span><span class="w"> </span><span class="n">cur</span><span class="w"> </span><span class="n">acc</span><span class="w"> </span><span class="bp">++</span><span class="w"> </span><span class="o">[</span><span class="n">Token</span><span class="bp">.</span><span class="n">RBrace</span><span class="o">],</span><span class="w"> </span><span class="s2">""</span><span class="o">)</span>
+<span class="w">    </span><span class="bp">|</span><span class="w"> </span><span class="bp">'</span><span class="o">,</span><span class="bp">'</span><span class="w"> </span><span class="bp">=&gt;</span><span class="w"> </span><span class="o">(</span><span class="n">flushLit</span><span class="w"> </span><span class="n">cur</span><span class="w"> </span><span class="n">acc</span><span class="w"> </span><span class="bp">++</span><span class="w"> </span><span class="o">[</span><span class="n">Token</span><span class="bp">.</span><span class="n">Comma</span><span class="o">],</span><span class="w">  </span><span class="s2">""</span><span class="o">)</span>
+<span class="w">    </span><span class="bp">|</span><span class="w"> </span><span class="bp">_</span><span class="w">   </span><span class="bp">=&gt;</span><span class="w"> </span><span class="o">(</span><span class="n">acc</span><span class="o">,</span><span class="w"> </span><span class="n">cur</span><span class="bp">.</span><span class="n">push</span><span class="w"> </span><span class="n">c</span><span class="o">)</span>
+<span class="w">  </span><span class="n">flushLit</span><span class="w"> </span><span class="n">cur</span><span class="w"> </span><span class="n">toks</span>
+
+<span class="c1">-- Parser ---------------------------------------------------------------</span>
+
+<span class="c1">-- Parse a comma-separated list of Lit patterns inside { }</span>
+<span class="n">partial</span><span class="w"> </span><span class="kn">def</span><span class="w"> </span><span class="n">parseAlts</span><span class="w"> </span><span class="o">(</span><span class="n">tokens</span><span class="w"> </span><span class="o">:</span><span class="w"> </span><span class="n">List</span><span class="w"> </span><span class="n">Token</span><span class="o">)</span><span class="w"> </span><span class="o">:</span><span class="w"> </span><span class="n">List</span><span class="w"> </span><span class="n">Pat</span><span class="w"> </span><span class="bp">×</span><span class="w"> </span><span class="n">List</span><span class="w"> </span><span class="n">Token</span><span class="w"> </span><span class="o">:=</span>
+<span class="w">  </span><span class="k">match</span><span class="w"> </span><span class="n">tokens</span><span class="w"> </span><span class="k">with</span>
+<span class="w">  </span><span class="bp">|</span><span class="w"> </span><span class="n">Token</span><span class="bp">.</span><span class="n">Lit</span><span class="w"> </span><span class="n">s</span><span class="w"> </span><span class="bp">::</span><span class="w"> </span><span class="n">rest</span><span class="w"> </span><span class="bp">=&gt;</span>
+<span class="w">      </span><span class="k">let</span><span class="w"> </span><span class="o">(</span><span class="n">others</span><span class="o">,</span><span class="w"> </span><span class="n">rest'</span><span class="o">)</span><span class="w"> </span><span class="o">:=</span><span class="w"> </span><span class="n">parseAlts'</span><span class="w"> </span><span class="n">rest</span>
+<span class="w">      </span><span class="o">(</span><span class="n">Pat</span><span class="bp">.</span><span class="n">Lit</span><span class="w"> </span><span class="n">s</span><span class="w"> </span><span class="bp">::</span><span class="w"> </span><span class="n">others</span><span class="o">,</span><span class="w"> </span><span class="n">rest'</span><span class="o">)</span>
+<span class="w">  </span><span class="bp">|</span><span class="w"> </span><span class="bp">_</span><span class="w"> </span><span class="bp">=&gt;</span><span class="w"> </span><span class="o">([],</span><span class="w"> </span><span class="n">tokens</span><span class="o">)</span>
+<span class="kn">where</span>
+<span class="w">  </span><span class="n">parseAlts'</span><span class="w"> </span><span class="o">:</span><span class="w"> </span><span class="n">List</span><span class="w"> </span><span class="n">Token</span><span class="w"> </span><span class="bp">→</span><span class="w"> </span><span class="n">List</span><span class="w"> </span><span class="n">Pat</span><span class="w"> </span><span class="bp">×</span><span class="w"> </span><span class="n">List</span><span class="w"> </span><span class="n">Token</span>
+<span class="w">    </span><span class="bp">|</span><span class="w"> </span><span class="n">Token</span><span class="bp">.</span><span class="n">Comma</span><span class="w"> </span><span class="bp">::</span><span class="w"> </span><span class="n">Token</span><span class="bp">.</span><span class="n">Lit</span><span class="w"> </span><span class="n">s</span><span class="w"> </span><span class="bp">::</span><span class="w"> </span><span class="n">rest</span><span class="w"> </span><span class="bp">=&gt;</span>
+<span class="w">        </span><span class="k">let</span><span class="w"> </span><span class="o">(</span><span class="n">more</span><span class="o">,</span><span class="w"> </span><span class="n">rest'</span><span class="o">)</span><span class="w"> </span><span class="o">:=</span><span class="w"> </span><span class="n">parseAlts'</span><span class="w"> </span><span class="n">rest</span>
+<span class="w">        </span><span class="o">(</span><span class="n">Pat</span><span class="bp">.</span><span class="n">Lit</span><span class="w"> </span><span class="n">s</span><span class="w"> </span><span class="bp">::</span><span class="w"> </span><span class="n">more</span><span class="o">,</span><span class="w"> </span><span class="n">rest'</span><span class="o">)</span>
+<span class="w">    </span><span class="bp">|</span><span class="w"> </span><span class="n">ts</span><span class="w"> </span><span class="bp">=&gt;</span><span class="w"> </span><span class="o">([],</span><span class="w"> </span><span class="n">ts</span><span class="o">)</span>
+
+<span class="c1">-- Parse a sequence of pattern elements; stop at end or unmatched }</span>
+<span class="n">partial</span><span class="w"> </span><span class="kn">def</span><span class="w"> </span><span class="n">parsePat</span><span class="w"> </span><span class="o">(</span><span class="n">tokens</span><span class="w"> </span><span class="o">:</span><span class="w"> </span><span class="n">List</span><span class="w"> </span><span class="n">Token</span><span class="o">)</span><span class="w"> </span><span class="o">:</span><span class="w"> </span><span class="n">Pat</span><span class="w"> </span><span class="bp">×</span><span class="w"> </span><span class="n">List</span><span class="w"> </span><span class="n">Token</span><span class="w"> </span><span class="o">:=</span>
+<span class="w">  </span><span class="k">let</span><span class="w"> </span><span class="o">(</span><span class="n">parts</span><span class="o">,</span><span class="w"> </span><span class="n">rest</span><span class="o">)</span><span class="w"> </span><span class="o">:=</span><span class="w"> </span><span class="n">parseElems</span><span class="w"> </span><span class="n">tokens</span><span class="w"> </span><span class="o">[]</span>
+<span class="w">  </span><span class="k">match</span><span class="w"> </span><span class="n">parts</span><span class="w"> </span><span class="k">with</span>
+<span class="w">  </span><span class="bp">|</span><span class="w"> </span><span class="o">[]</span><span class="w">     </span><span class="bp">=&gt;</span><span class="w"> </span><span class="o">(</span><span class="n">Pat</span><span class="bp">.</span><span class="n">Lit</span><span class="w"> </span><span class="s2">""</span><span class="o">,</span><span class="w"> </span><span class="n">rest</span><span class="o">)</span>
+<span class="w">  </span><span class="bp">|</span><span class="w"> </span><span class="o">[</span><span class="n">p</span><span class="o">]</span><span class="w">    </span><span class="bp">=&gt;</span><span class="w"> </span><span class="o">(</span><span class="n">p</span><span class="o">,</span><span class="w"> </span><span class="n">rest</span><span class="o">)</span>
+<span class="w">  </span><span class="bp">|</span><span class="w"> </span><span class="n">p</span><span class="w"> </span><span class="bp">::</span><span class="w"> </span><span class="n">ps</span><span class="w"> </span><span class="bp">=&gt;</span><span class="w"> </span><span class="o">(</span><span class="n">ps</span><span class="bp">.</span><span class="n">foldl</span><span class="w"> </span><span class="n">Pat</span><span class="bp">.</span><span class="n">Seq</span><span class="w"> </span><span class="n">p</span><span class="o">,</span><span class="w"> </span><span class="n">rest</span><span class="o">)</span>
+<span class="kn">where</span>
+<span class="w">  </span><span class="n">parseElems</span><span class="w"> </span><span class="o">:</span><span class="w"> </span><span class="n">List</span><span class="w"> </span><span class="n">Token</span><span class="w"> </span><span class="bp">→</span><span class="w"> </span><span class="n">List</span><span class="w"> </span><span class="n">Pat</span><span class="w"> </span><span class="bp">→</span><span class="w"> </span><span class="n">List</span><span class="w"> </span><span class="n">Pat</span><span class="w"> </span><span class="bp">×</span><span class="w"> </span><span class="n">List</span><span class="w"> </span><span class="n">Token</span>
+<span class="w">    </span><span class="bp">|</span><span class="w"> </span><span class="o">[],</span><span class="w">                      </span><span class="n">acc</span><span class="w"> </span><span class="bp">=&gt;</span><span class="w"> </span><span class="o">(</span><span class="n">acc</span><span class="o">,</span><span class="w"> </span><span class="o">[])</span>
+<span class="w">    </span><span class="bp">|</span><span class="w"> </span><span class="n">Token</span><span class="bp">.</span><span class="n">RBrace</span><span class="w"> </span><span class="bp">::</span><span class="w"> </span><span class="n">rest</span><span class="o">,</span><span class="w">    </span><span class="n">acc</span><span class="w"> </span><span class="bp">=&gt;</span><span class="w"> </span><span class="o">(</span><span class="n">acc</span><span class="o">,</span><span class="w"> </span><span class="n">Token</span><span class="bp">.</span><span class="n">RBrace</span><span class="w"> </span><span class="bp">::</span><span class="w"> </span><span class="n">rest</span><span class="o">)</span>
+<span class="w">    </span><span class="bp">|</span><span class="w"> </span><span class="n">Token</span><span class="bp">.</span><span class="n">Star</span><span class="w">   </span><span class="bp">::</span><span class="w"> </span><span class="n">rest</span><span class="o">,</span><span class="w">    </span><span class="n">acc</span><span class="w"> </span><span class="bp">=&gt;</span><span class="w"> </span><span class="n">parseElems</span><span class="w"> </span><span class="n">rest</span><span class="w"> </span><span class="o">(</span><span class="n">acc</span><span class="w"> </span><span class="bp">++</span><span class="w"> </span><span class="o">[</span><span class="n">Pat</span><span class="bp">.</span><span class="n">Wild</span><span class="o">])</span>
+<span class="w">    </span><span class="bp">|</span><span class="w"> </span><span class="n">Token</span><span class="bp">.</span><span class="n">Lit</span><span class="w"> </span><span class="n">s</span><span class="w">  </span><span class="bp">::</span><span class="w"> </span><span class="n">rest</span><span class="o">,</span><span class="w">    </span><span class="n">acc</span><span class="w"> </span><span class="bp">=&gt;</span><span class="w"> </span><span class="n">parseElems</span><span class="w"> </span><span class="n">rest</span><span class="w"> </span><span class="o">(</span><span class="n">acc</span><span class="w"> </span><span class="bp">++</span><span class="w"> </span><span class="o">[</span><span class="n">Pat</span><span class="bp">.</span><span class="n">Lit</span><span class="w"> </span><span class="n">s</span><span class="o">])</span>
+<span class="w">    </span><span class="bp">|</span><span class="w"> </span><span class="n">Token</span><span class="bp">.</span><span class="n">LBrace</span><span class="w"> </span><span class="bp">::</span><span class="w"> </span><span class="n">rest</span><span class="o">,</span><span class="w">    </span><span class="n">acc</span><span class="w"> </span><span class="bp">=&gt;</span>
+<span class="w">        </span><span class="k">let</span><span class="w"> </span><span class="o">(</span><span class="n">alts</span><span class="o">,</span><span class="w"> </span><span class="n">rest'</span><span class="o">)</span><span class="w"> </span><span class="o">:=</span><span class="w"> </span><span class="n">parseAlts</span><span class="w"> </span><span class="n">rest</span>
+<span class="w">        </span><span class="k">let</span><span class="w"> </span><span class="n">rest''</span><span class="w"> </span><span class="o">:=</span><span class="w"> </span><span class="k">match</span><span class="w"> </span><span class="n">rest'</span><span class="w"> </span><span class="k">with</span>
+<span class="w">          </span><span class="bp">|</span><span class="w"> </span><span class="n">Token</span><span class="bp">.</span><span class="n">RBrace</span><span class="w"> </span><span class="bp">::</span><span class="w"> </span><span class="n">r</span><span class="w"> </span><span class="bp">=&gt;</span><span class="w"> </span><span class="n">r</span>
+<span class="w">          </span><span class="bp">|</span><span class="w"> </span><span class="n">r</span><span class="w">                 </span><span class="bp">=&gt;</span><span class="w"> </span><span class="n">r</span>
+<span class="w">        </span><span class="n">parseElems</span><span class="w"> </span><span class="n">rest''</span><span class="w"> </span><span class="o">(</span><span class="n">acc</span><span class="w"> </span><span class="bp">++</span><span class="w"> </span><span class="o">[</span><span class="n">Pat</span><span class="bp">.</span><span class="n">Alt</span><span class="w"> </span><span class="n">alts</span><span class="o">])</span>
+<span class="w">    </span><span class="bp">|</span><span class="w"> </span><span class="n">Token</span><span class="bp">.</span><span class="n">Comma</span><span class="w">  </span><span class="bp">::</span><span class="w"> </span><span class="n">rest</span><span class="o">,</span><span class="w">    </span><span class="n">acc</span><span class="w"> </span><span class="bp">=&gt;</span><span class="w"> </span><span class="n">parseElems</span><span class="w"> </span><span class="n">rest</span><span class="w"> </span><span class="n">acc</span>
+
+<span class="kn">def</span><span class="w"> </span><span class="n">parse</span><span class="w"> </span><span class="o">(</span><span class="n">s</span><span class="w"> </span><span class="o">:</span><span class="w"> </span><span class="n">String</span><span class="o">)</span><span class="w"> </span><span class="o">:</span><span class="w"> </span><span class="n">Pat</span><span class="w"> </span><span class="o">:=</span><span class="w"> </span><span class="o">(</span><span class="n">parsePat</span><span class="w"> </span><span class="o">(</span><span class="n">tokenize</span><span class="w"> </span><span class="n">s</span><span class="o">))</span><span class="bp">.</span><span class="m">1</span>
+
+<span class="c1">-- Tests ----------------------------------------------------------------</span>
+
+<span class="bp">#</span><span class="n">eval</span><span class="w"> </span><span class="n">tokenize</span><span class="w"> </span><span class="s2">"2023-*.{pdf,txt}"</span>
+<span class="c1">-- [Lit "2023-", Star, Lit ".", LBrace, Lit "pdf", Comma, Lit "txt", RBrace]</span>
+
+<span class="bp">#</span><span class="n">eval</span><span class="w"> </span><span class="n">parse</span><span class="w"> </span><span class="s2">"2023-*.{pdf,txt}"</span>
+<span class="c1">-- Seq (Seq (Seq (Lit "2023-") Wild) (Lit ".")) (Alt [Lit "pdf", Lit "txt"])</span>
+
+<span class="bp">#</span><span class="n">guard</span><span class="w"> </span><span class="n">tokenize</span><span class="w"> </span><span class="s2">"ab*"</span><span class="w"> </span><span class="bp">==</span><span class="w"> </span><span class="o">[</span><span class="n">Token</span><span class="bp">.</span><span class="n">Lit</span><span class="w"> </span><span class="s2">"ab"</span><span class="o">,</span><span class="w"> </span><span class="n">Token</span><span class="bp">.</span><span class="n">Star</span><span class="o">]</span>
+<span class="bp">#</span><span class="n">guard</span><span class="w"> </span><span class="n">tokenize</span><span class="w"> </span><span class="s2">"{x,y}"</span><span class="w"> </span><span class="bp">==</span>
+<span class="w">  </span><span class="o">[</span><span class="n">Token</span><span class="bp">.</span><span class="n">LBrace</span><span class="o">,</span><span class="w"> </span><span class="n">Token</span><span class="bp">.</span><span class="n">Lit</span><span class="w"> </span><span class="s2">"x"</span><span class="o">,</span><span class="w"> </span><span class="n">Token</span><span class="bp">.</span><span class="n">Comma</span><span class="o">,</span><span class="w"> </span><span class="n">Token</span><span class="bp">.</span><span class="n">Lit</span><span class="w"> </span><span class="s2">"y"</span><span class="o">,</span><span class="w"> </span><span class="n">Token</span><span class="bp">.</span><span class="n">RBrace</span><span class="o">]</span>
+</code></pre></div>
+</div>
+</main>
+<footer aria-label="Page navigation">
+<div class="row">
+<div class="col-3 left">
+<span aria-hidden="true">⇐</span> <a href="../glob/">Matching Patterns</a>
+</div>
+<div class="col-6 center">
+<a href="../">sdxl</a>
+	  ©
+	  <a href="../#acknowledgments">the authors</a>
+</div>
+<div class="col-3 right">
+<a href="../test/">Running Tests</a> <span aria-hidden="true">⇒</span>
+</div>
+</div>
+</footer>
+</body>
+</html>
