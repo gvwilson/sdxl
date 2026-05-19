@@ -10,33 +10,31 @@ dependencies = [
     "taskipy>=1.14.1",
 ]
 
-[tool.taskipy.tasks]
-bib = {
-    help = "Check bibliography entries",
-    cmd = "mccole bib"
-}
-clean = {
-    help = "Clean up generated and cache files",
-    cmd = "find . -type f -name '*~' -exec rm {} \\;"
-}
-check = {
-    help = "Check code and project",
-    cmd = """
-        mccole check --src . --dst docs
-        typos *.md */*.md
-    """
-}
-serve = {
-    help = "Serve generated HTML",
-    cmd = "python -m http.server -d docs"
-}
-site = {
-    help = "Build HTML",
-    cmd = """
-        mccole build --src . --dst docs
-        touch docs/.nojekyll
-    """
-}
+[tool.taskipy.tasks.bib]
+help = "Check bibliography entries"
+cmd = "mccole bib"
+
+[tool.taskipy.tasks.clean]
+help = "Clean up generated and cache files"
+cmd = "find . -type f -name '*~' -exec rm {} \\;"
+
+[tool.taskipy.tasks.check]
+help = "Check code and project"
+cmd = """
+    mccole check --src . --dst docs
+    typos *.md */*.md
+"""
+
+[tool.taskipy.tasks.serve]
+help = "Serve generated HTML"
+cmd = "python -m http.server -d docs"
+
+[tool.taskipy.tasks.site]
+help = "Build HTML"
+cmd = """
+    mccole build --src . --dst docs
+    touch docs/.nojekyll
+"""
 
 [tool.mccole]
 brand = "sdxl"
